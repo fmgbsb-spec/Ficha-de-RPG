@@ -221,7 +221,24 @@ p { margin: 0 0 8px; }
   background: var(--cartao); color: var(--tinta); border-bottom: 2px solid var(--destaque);
   padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
 }
-.faixa-nome { font: 700 20px/1.2 var(--fonte-titulo); color: var(--destaque); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* E1 (v0.20.0): nome e, à direita, a engrenagem que abre a tela Personagem; 44 px de toque, sem moldura */
+.faixa-topo { display: flex; align-items: center; gap: 8px; margin: -6px -10px -4px 0; }
+.faixa-nome { flex: 1; min-width: 0; font: 700 20px/1.2 var(--fonte-titulo); color: var(--destaque); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#engrenagem {
+  flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  padding: 0; background: none; border: 0; border-radius: var(--raio); color: var(--suave);
+}
+#engrenagem[aria-current=page] { color: var(--destaque); }
+/* topo da tela Personagem: a saída para a aba de jogo */
+.voltar-jogo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }
+.titulo-tela { font: 700 calc(18px * var(--texto))/1.2 var(--fonte-titulo); color: var(--destaque); }
+/* tela Personagem (E1): sem a barra de abas; o rodapé do formulário desce para o pé da tela */
+#abas[hidden] { display: none; }
+body.edicao #tela { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+body.edicao #rodape { bottom: 0; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+body.edicao.com-rodape #tela { padding-bottom: calc(103px + env(safe-area-inset-bottom)); }
+body.edicao #aviso { bottom: calc(12px + env(safe-area-inset-bottom)); }
+body.edicao.com-rodape #aviso { bottom: calc(79px + env(safe-area-inset-bottom)); }
 .faixa-linha { font-size: 13px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Números da faixa: tocar abre a conta de cada um */
 .faixa-numeros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
@@ -496,7 +513,7 @@ section[id^="bloco-"], #escolha-magias { scroll-margin-top: 140px; }
 }
 #abas button {
   flex: 1; min-width: 0; min-height: 56px; padding: 0 1px; background: none; border: 0; border-top: 3px solid transparent;
-  font-size: 12px; font-weight: 600; color: var(--suave);   /* cinco abas: "Personagem" tem de caber em 72 px (tela de 360) */
+  font-size: 12px; font-weight: 600; color: var(--suave);   /* quatro abas desde a v0.20.0 (90 px cada na tela de 360) */
 }
 #abas button[aria-current=page] { color: var(--destaque); border-top-color: var(--destaque); }
 #abas button.travada { opacity: .55; }   /* formulário guiado aberto: a aba mostra só o cartão que leva a ele (REGRAS 30.1, 0a) */
@@ -764,7 +781,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 // A versão é gravada pelo build.ps1, a partir de VERSAO.txt.
 (function (F) {
   'use strict';
-  F.versao = '0.19.1';
+  F.versao = '0.20.0';
 })(window.Ficha = window.Ficha || {});
 </script>
 <script>
@@ -5886,7 +5903,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     // Clérigo
     { id: 'bencao-da-forja', de: 'dominio-da-forja/bencao-da-forja', acao: 'livre', recupera: 'longo', usos: um,
       resumo: function () { return 'No fim de um Descanso Longo: a armadura ganha + ' + K.BENCAO_DA_FORJA + ' na CA, ou uma arma + ' + K.BENCAO_DA_FORJA + ' no ataque e no dano, até o próximo Descanso Longo'; },
-      contas: function () { return ['O item escolhido fica em "Bênção da Forja: item", na aba Personagem; a ficha já soma o bônus.']; } },
+      contas: function () { return ['O item escolhido fica em "Bênção da Forja: item", na tela Personagem; a ficha já soma o bônus.']; } },
     { id: 'olhos-da-sepultura', de: 'dominio-da-sepultura/olhos-da-sepultura', acao: 'acao', recupera: 'longo', usos: sabMin1,
       resumo: function () { return 'Até o fim do seu próximo turno, sabe onde está cada Morto-Vivo a até 18 m sem cobertura total'; } },
     { id: 'sentinela-na-porta-da-morte', de: 'dominio-da-sepultura/sentinela-na-porta-da-morte', acao: 'reacao', recupera: 'longo', usos: sabMin1,
@@ -6308,7 +6325,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       resumo: function (x) {
         var id = x.escolhidas('afinidade-elemental')[0], t = K.tiposDaAfinidade(x.carac('feiticaria-draconica/afinidade-elemental')).filter(function (o) { return o.id === id; })[0];
         return t ? 'Ao conjurar magia de dano ' + t.nome + ': ' + R.fmtMod(x.mods.car) + ' numa jogada de dano dela (mod. de Carisma); Resistência a dano ' + t.nome :
-          'Escolha o tipo de dano na aba Personagem';
+          'Escolha o tipo de dano na tela Personagem';
       } },
     { de: 'feiticaria-mecanica/bastiao-da-lei', acao: 'acao',
       resumo: 'Gasta de 1 a ' + K.BASTIAO_DA_LEI.max + ' Pontos de Feitiçaria: proteção de um ' + K.BASTIAO_DA_LEI.dado + ' por ponto, em você ou em criatura a até 9 m' },
@@ -6503,7 +6520,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
           if (a === 'deserto') return 'Em Fúria (ao entrar e depois com Ação Bônus): cada outra criatura na aura de ' + A.alcance + ' m sofre ' + porNivel(A.deserto, x.nivel) + ' de dano Ígneo';
           if (a === 'mar') return 'Em Fúria (ao entrar e depois com Ação Bônus): uma criatura na aura de ' + A.alcance + ' m, salvaguarda de Destreza, CD ' + cd + ': ' + porNivel(A.mar, x.nivel) + ' de dano Elétrico; metade no sucesso';
           if (a === 'tundra') return 'Em Fúria (ao entrar e depois com Ação Bônus): cada criatura escolhida na aura de ' + A.alcance + ' m ganha ' + porNivel(A.tundra, x.nivel) + ' PV temporários';
-          return 'Escolha o ambiente em "Aura da Tempestade: ambiente", na aba Personagem';
+          return 'Escolha o ambiente em "Aura da Tempestade: ambiente", na tela Personagem';
         } },
       { de: 'caminho-do-arauto-da-tempestade/tempestade-furiosa', acao: function (x) { return ambiente(x) === 'tundra' ? 'livre' : 'reacao'; },
         resumo: function (x) {
@@ -6511,7 +6528,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
           if (a === 'deserto') return 'Criatura na aura acerta você: salvaguarda de Destreza, CD ' + cd + ', ou ' + Math.floor(x.nivel / 2) + ' de dano Ígneo';
           if (a === 'mar') return 'Você acerta uma criatura na aura: salvaguarda de Força, CD ' + cd + ', ou Caída';
           if (a === 'tundra') return 'Ao ativar a aura: uma criatura na aura, salvaguarda de Força, CD ' + cd + ', ou Deslocamento 0 até o início do seu próximo turno';
-          return 'Escolha o ambiente em "Aura da Tempestade: ambiente", na aba Personagem';
+          return 'Escolha o ambiente em "Aura da Tempestade: ambiente", na tela Personagem';
         } },
       // Bardo
       { de: 'colegio-das-espadas/floreio-de-laminas', acao: 'livre',
@@ -13942,7 +13959,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 
   T.DICAS = {
     nome: { frase: 'O nome pode ser o que você quiser.', pagina: 41,
-      app: 'Cada pergunta mostra uma dica como esta na primeira vez. Com o herói pronto, "Ver as dicas de novo" fica em "Aparência do app", no fim da aba Personagem.' },
+      app: 'Cada pergunta mostra uma dica como esta na primeira vez. Com o herói pronto, "Ver as dicas de novo" fica em "Aparência do app", no fim da tela Personagem (engrenagem no alto à direita).' },
     nivelInicial: { frase: 'Seu Mestre pode iniciar com os personagens do seu grupo em um nível superior a 1.', pagina: 43,
       app: 'Sem esse combinado com o mestre, deixe no 1.' },
     classe: { frase: 'A escolha da sua classe é a decisão mais importante ao criar um personagem e influencia muitas das escolhas que você fará nos próximos passos.', pagina: 36,
@@ -13997,12 +14014,13 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 })(window.Ficha = window.Ficha || {});
 </script>
 <script>
-// Tela do app: cinco abas, faixa do topo e gaveta. A tela não calcula: lê o resultado de derivar().
+// Tela do app: quatro abas, tela Personagem pela engrenagem (v0.20.0), faixa do topo e gaveta. A tela não calcula: lê o resultado de derivar().
 (function (F) {
   'use strict';
   var R = F.regras, P = F.personagem, A = F.armazenamento, C = F.catalogo, K = F.classes, M = F.magias, L = F.folha, Cr = F.criaturas;
+  // E1 (v0.20.0, REGRAS 31): a barra de baixo só tem as abas do jogo; a tela Personagem (criação, nível, correções) abre
+  // pela engrenagem da faixa, na rota #personagem, sem a barra
   var ABAS = [
-    { id: 'personagem', nome: 'Personagem' },
     { id: 'acoes', nome: 'Ações' },
     { id: 'magias', nome: 'Magias' },
     { id: 'monstros', nome: 'Monstros' },
@@ -14022,7 +14040,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   // O que o app faz com cada característica de classe (grau de automação, docs\REGRAS.md, seção 11)
   var GRAU_NA_GAVETA = {
     A: 'O app já põe esta característica na conta.', B: 'Tem contador na aba Ações.', linha: 'Aparece como linha na aba Ações.',
-    C: 'Só texto: o app mostra a regra; aplicar na mesa é com você.', magia: 'Entra nas magias: aba Magias.', escolha: 'A escolha é feita na aba Personagem.'
+    C: 'Só texto: o app mostra a regra; aplicar na mesa é com você.', magia: 'Entra nas magias: aba Magias.', escolha: 'A escolha é feita na tela Personagem.'
   };
 
   // ?exemplo=N: abre um dos personagens de exemplo da conferência, sem ler nem gravar as fichas do aparelho.
@@ -14046,7 +14064,11 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     document.documentElement.setAttribute('data-tema', pref.tema);
   }
   aplicarPreferencias();
-  var rota = { aba: 'personagem', item: '' };
+  var rota = { aba: '', item: '' };
+  var ultimaAba = 'acoes';   // E1: "‹ Voltar ao jogo" volta à aba de onde a engrenagem foi tocada
+  // E1 (revisão): a engrenagem tocada numa aba de jogo cria entrada no histórico, para o Voltar do celular e o "‹ Voltar ao
+  // jogo" (history.back) devolverem à mesma página da aba; rolagemJogo devolve a rolagem
+  var abriuEdicao = false, rolagemJogo = 0;
   var abriuItem = false, abriuImagem = false, relogioAviso = null, abertura = null, rolarPara = '';
   var abertos = {};   // listas recolhidas que o jogador abriu: a tela é redesenhada a cada toque e tem de lembrar
 
@@ -14073,10 +14095,16 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   // ---------- rota: #aba ou #aba/item ----------
   function lerRota() {
     var partes = location.hash.replace(/^#/, '').split('/');
-    var aba = ABAS.some(function (a) { return a.id === partes[0]; }) ? partes[0] : 'personagem';
+    // sem aba válida, '' : o desenhar() escolhe Ações, ou a tela Personagem se o formulário guiado está aberto (E1-b)
+    var aba = partes[0] === 'personagem' || ABAS.some(function (a) { return a.id === partes[0]; }) ? partes[0] : '';
     return { aba: aba, item: decodeURIComponent(partes.slice(1).join('/')) };   // o item pode trazer barra (característica: classe/id)
   }
-  function irAba(aba) { abriuItem = false; location.replace('#' + aba); }
+  function irAba(aba) { abriuItem = false; abriuEdicao = false; location.replace('#' + aba); }
+  function abrirEdicao() {
+    if (rota.aba === 'personagem') return;
+    abriuItem = false; abriuEdicao = true; location.hash = '#personagem';
+  }
+  function voltarDaEdicao() { if (abriuEdicao) { abriuEdicao = false; history.back(); } else irAba(ultimaAba); }
   function abrirItem(item) { abriuItem = true; location.hash = '#' + rota.aba + '/' + item; }   // o botão Voltar do celular fecha a gaveta
   function fecharItem() { if (abriuItem) { abriuItem = false; history.back(); } else location.replace('#' + rota.aba); }
   // Volta da ficha de criatura à lista de onde ela foi aberta: "Todas" ou "Do meu personagem"
@@ -14088,6 +14116,9 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   // Gaveta em meia tela (REGRAS 27.5, RV2-14): meia altura ou inteira; o puxador no alto troca (toque ou arraste)
   var PUXADOR = '<button type="button" class="puxador" data-acao="gaveta-altura" aria-label="Mudar a altura do painel"><span aria-hidden="true"></span></button>';
   var gavetaAtual = '', alturaGaveta = 'meia', arrastoDe = null, arrastouEm = 0;
+  // E1: engrenagem em traço, na cor do texto do botão (sem emoji nem círculo colorido: DESIGN.md da plataforma, 10)
+  var ENGRENAGEM = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   function mudarAltura(a) { alturaGaveta = a; el('gaveta').className = a; }
 
   // ---------- peças ----------
@@ -14226,7 +14257,10 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var barra = !d.pv.definido ? '' : lb ? barraPv(P.barraPv(lb.pv.atuais, lb.pv.max, 0)) : barraPv(d.pv.barra);
     var embaixo = d.pv.morte.ativa ? (d.pv.morto ? 'Morto' : d.pv.morte.estavel ? 'Estável' : 'Inconsciente') :
       d.pv.temporarios ? '+' + d.pv.temporarios + ' temp.' : d.pv.definido && d.pv.sangrando ? 'Sangrando' : '';
-    el('faixa').innerHTML = '<div class="faixa-nome" id="faixa-nome">' + esc(p.nome) + '</div>' +
+    // E1: engrenagem no canto direito, na linha do nome; na tela Personagem fica marcada
+    var naEdicao = rota.aba === 'personagem';
+    el('faixa').innerHTML = '<div class="faixa-topo"><div class="faixa-nome" id="faixa-nome">' + esc(p.nome) + '</div>' +
+      '<button type="button" id="engrenagem" data-acao="aba" data-id="personagem" aria-label="Editar personagem"' + (naEdicao ? ' aria-current="page"' : '') + '>' + ENGRENAGEM + '</button></div>' +
       '<div class="faixa-linha">' + esc(sub + (lb ? ' · na forma de lobisomem' : '')) + '</div><div class="faixa-numeros">' +
       (lb ? numero('pv', 'PV forma', lb.pv.atuais + '/' + lb.pv.max, '<small>normal ' + pv + '</small>' + barra) :
         numero('pv', 'PV', pv, (embaixo ? '<small>' + embaixo + '</small>' : '') + barra)) +
@@ -14235,14 +14269,21 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       numero('iniciativa', 'Iniciativa', R.fmtMod(d.iniciativa)) + '</div>';
   }
 
-  // travadas: com o formulário guiado aberto, as abas fora da Personagem mostram só o cartão que leva a ele (30.1, 0a)
+  // travadas: com o formulário guiado aberto, as abas mostram só o cartão que leva a ele (30.1, 0a)
+  // E1: na tela Personagem a barra sai (fica no DOM, escondida)
   function desenharAbas(travadas) {
     el('abas').innerHTML = ABAS.map(function (a) {
-      return '<button type="button" data-acao="aba" data-id="' + a.id + '"' + (a.id === rota.aba ? ' aria-current="page"' : '') + (travadas && a.id !== 'personagem' ? ' class="travada"' : '') + '>' + a.nome + '</button>';
+      return '<button type="button" data-acao="aba" data-id="' + a.id + '"' + (a.id === rota.aba ? ' aria-current="page"' : '') + (travadas ? ' class="travada"' : '') + '>' + a.nome + '</button>';
     }).join('');
+    el('abas').hidden = rota.aba === 'personagem';
+  }
+  // Topo da tela Personagem (E1-a): sai dela para a última aba de jogo. Com o formulário guiado aberto não aparece: as
+  // abas estão travadas e o formulário tem os próprios botões
+  function voltarAoJogo() {
+    return '<div class="voltar-jogo"><button type="button" class="botao" id="voltar-jogo" data-acao="voltar-jogo">‹ Voltar ao jogo</button><span class="titulo-tela">Personagem</span></div>';
   }
 
-  // ---------- aba Personagem ----------
+  // ---------- tela Personagem ----------
   // Contador de XP (docs\REGRAS.md, seção 4): o total, o mínimo do nível seguinte e quanto falta; no nível 20, só o
   // total. Somar XP sobe o nível sozinho; a correção do total fica recolhida.
   function blocoXp(p, d) {
@@ -14761,7 +14802,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 
   function textoDoPacto(pc) { return pc.total + (pc.total === 1 ? ' espaço de ' : ' espaços de ') + ORDINAIS[pc.circulo] + ' círculo'; }
 
-  // Cartão "Escolha das magias" da aba Magias (era o bloco 7 da aba Personagem até a U1; docs\ESPECIFICACAO.md,
+  // Cartão "Escolha das magias" da aba Magias (era o bloco 7 da tela Personagem até a U1; docs\ESPECIFICACAO.md,
   // seção 16): um quadro por origem, no mesmo estilo. Sem falta, o conteúdo nasce recolhido, para não pesar no jogo.
   // A CD e o ataque de cada origem ficam no cartão Conjuração, logo acima.
   function cartaoEscolhaMagias(p, d) {
@@ -14777,7 +14818,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
         h += campoSelect('Atributo de conjuração', 'magia-atributo', opt('', 'Escolha o atributo', o.atributo) +
           M.ATRIBUTOS_DE_ESCOLHA.map(function (a) { return opt(a, nomeAtributo(a), o.atributo); }).join(''), ' data-id="' + o.id + '"');
       }
-      if (!o.atributo && !o.pedeAtributo) h += '<p class="nota">O atributo de conjuração é o que o talento aumenta: escolha-o no bloco 4 da aba Personagem.</p>';
+      if (!o.atributo && !o.pedeAtributo) h += '<p class="nota">O atributo de conjuração é o que o talento aumenta: escolha-o no bloco 4 da tela Personagem.</p>';
       doBloco.forEach(function (e) { h += blocoEscolhaMagia(e); });
       var fixas = g.conhecidas.filter(function (k) { return k.origem === o.id && escolhidas.indexOf(k.id) < 0; });
       var porFonte = {};
@@ -14826,7 +14867,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     return h + diagnostico();
   }
 
-  // Personagens e arquivo, e Aparência do app: no fim da aba Personagem; no formulário guiado, só a Aparência, recolhida (G2-7)
+  // Personagens e arquivo, e Aparência do app: no fim da tela Personagem; no formulário guiado, só a Aparência, recolhida (G2-7)
   function blocoArquivo(p, semVersao) {
     var h = '';
     if (estado.personagens.length > 1) {
@@ -15378,7 +15419,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       return '<div class="guia-numeros" id="guia-numeros">' + caixa('PV', d.pv.definido ? d.pv.max : null) + caixa('CA', d.ca.total) +
         caixa('Ataque', R.fmtMod(at ? at.ataque : ad.ataque), at ? at.nome + (at.danoCurto ? ', ' + at.danoCurto : '') : nomeDesarmado(ad) + (ad.danoCurto ? ', ' + ad.danoCurto : '')) +
         (cds.length ? caixa('CD de magia', cds[0].cd, cds.length > 1 ? cds[0].nome : '') : '') + '</div>' +
-        '<p class="nota">As abas Ações, Magias, Monstros e Ficha abrem com o personagem montado. Qualquer resposta muda depois na aba Personagem.</p>';
+        '<p class="nota">As abas Ações, Magias, Monstros e Ficha abrem com o personagem montado. Qualquer resposta muda depois na tela Personagem, pela engrenagem no alto à direita.</p>';
     }
   };
   var BLOCO_DE_HOJE = { classe: blocoClasse, origem: blocoOrigem, atributos: blocoAtributos, talentos: blocoTalentos, pericias: blocoPericias,
@@ -15426,13 +15467,13 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   // Abas travadas (0a): o cartão leva à primeira pergunta que falta
   function cartaoTravado(gt) {
     var faltam = gt.lista.filter(prende).length;
-    return '<section class="cartao" id="guia-travado"><h2>Termine de montar o personagem</h2><p>Esta aba abre quando o formulário da aba Personagem chegar a "Pronto para jogar!".' +
+    return '<section class="cartao" id="guia-travado"><h2>Termine de montar o personagem</h2><p>Esta aba abre quando o formulário da tela Personagem chegar a "Pronto para jogar!".' +
       (faltam ? ' Falta responder ' + faltam + (faltam === 1 ? ' pergunta.' : ' perguntas.') : '') + '</p>' +
       '<div class="botoes"><button type="button" class="botao principal" data-acao="guia-continuar">Ir para o formulário</button></div>' +
       '<p class="nota" style="margin-top:10px">Próxima pergunta: ' + esc(gt.lista[gt.alcance].pergunta) + '</p></section>';
   }
   // ---------- resumo com "Mudar" (4a, 5a, 5b; G3c, REGRAS 30.6) ----------
-  // Com o personagem pronto, a aba Personagem é o resumo: nível e XP no alto; uma parte por bloco da barra, cada resposta
+  // Com o personagem pronto, a tela Personagem é o resumo: nível e XP no alto; uma parte por bloco da barra, cada resposta
   // numa linha com "Mudar"; no fim de cada parte, "Ver todos os campos" abre o bloco de hoje (o que não tem pergunta:
   // Dádiva Sombria, classes adicionadas, duas cópias da arma…); arquivo e aparência recolhidos no fim.
   var mudando = null, rolagemResumo = 0;   // { id do personagem, passo, bloco }
@@ -15662,7 +15703,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       d.ataques.map(function (a) { return linhaItem('arma:' + a.indice, a.nome, resumoAtaque(a), a.danoCurto, true, a.naForma ? 'na forma' : ''); }).join('') +
       linhaItem('ataque-desarmado', nomeDesarmado(ad), 'Ataque ' + R.fmtMod(ad.ataque) + ' · ou imobilizar, ou empurrar', ad.danoCurto, true) +
       d.danosExtras.map(function (x) { return linhaItem('extra:' + x.id, x.nome, x.resumo, '+' + x.dano, true); }).join('') +
-      '</ul>' + (d.ataques.length ? '' : '<p class="nota">Equipe as armas no bloco Equipamento da aba Personagem: cada uma vira uma linha aqui.</p>') +
+      '</ul>' + (d.ataques.length ? '' : '<p class="nota">Equipe as armas no bloco Equipamento da tela Personagem: cada uma vira uma linha aqui.</p>') +
       '<p class="nota">À direita, o dano de cada ataque. Toque na linha para ver o tipo de dano e a conta.' +
       (g.conhecidas.length ? ' As magias, com o dano de cada uma, ficam na aba Magias.' : '') + '</p></section>' +
       // Título com o número de ações do turno (pedido do Francisco, 2026-10-09): 1 (o marcador da Celeridade saiu na
@@ -15772,7 +15813,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var m = C.maestria(arma.maestria);
     if (m) {
       h += '<h4>Maestria: ' + esc(m.nome) + '</h4>' + textoLivro(m.texto) + '<p class="nota">' + (a && a.maestriaAtiva ? 'Maestria ativa: esta arma está entre as escolhidas em Maestria em Arma.' :
-        'Sem efeito por enquanto: a maestria só vale para as armas escolhidas na característica Maestria em Arma (bloco 1 da aba Personagem).') + '</p>';
+        'Sem efeito por enquanto: a maestria só vale para as armas escolhidas na característica Maestria em Arma (bloco 1 da tela Personagem).') + '</p>';
     }
     return { titulo: arma.nome, html: h, fonte: arma.criado ? 'Item criado pela mesa. Propriedades: Livro do Jogador 2024, p. 213–214.' : 'Livro do Jogador 2024, p. 213–215.' };
   }
@@ -16028,7 +16069,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   function gaveta(p, d, item) {
     var partes = item.split(':'), tipo = partes[0], id = partes.slice(1).join(':'), x;
     if (tipo === 'pv') {
-      if (!d.pv.definido) return { titulo: 'Pontos de Vida', html: '<p>Escolha a classe na aba Personagem: ela define o dado de vida e os Pontos de Vida.</p>', fonte: 'Livro do Jogador 2024, p. 40.' };
+      if (!d.pv.definido) return { titulo: 'Pontos de Vida', html: '<p>Escolha a classe na tela Personagem: ela define o dado de vida e os Pontos de Vida.</p>', fonte: 'Livro do Jogador 2024, p. 40.' };
       return { titulo: 'Pontos de Vida', fonte: 'Livro do Jogador 2024, p. 27–29 e 40–42.', html:
         '<p class="pv-grande"><b id="pv-atuais">' + d.pv.atuais + '</b> / ' + d.pv.max + (d.pv.temporarios ? ' <small>+ ' + d.pv.temporarios + ' temporários</small>' : '') +
         (d.pv.atuais === 0 ? ' <small>0 PV: Inconsciente</small>' : d.pv.sangrando ? ' <small>Sangrando</small>' : '') + '</p>' + barraPv(d.pv.barra) +
@@ -16049,7 +16090,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       // várias formas de calcular a CA (multiclasse, p. 44; MC-C, MC2-9): vale a maior; as outras, com a CA que dariam
       (d.ca.alternativas && d.ca.alternativas.length ? '<p class="nota" id="ca-alternativas">Só uma forma de calcular a CA vale por vez; o app usa a maior (p. 44). As outras: ' +
         esc(d.ca.alternativas.map(function (a) { return a.nome + ' (CA ' + a.total + ')'; }).join('; ')) + '.</p>' : '') +
-      '<p class="nota" style="margin-top:10px">Um ataque acerta quando a jogada iguala ou supera este número. A armadura e o escudo são escolhidos no bloco Equipamento da aba Personagem.</p>' +
+      '<p class="nota" style="margin-top:10px">Um ataque acerta quando a jogada iguala ou supera este número. A armadura e o escudo são escolhidos no bloco Equipamento da tela Personagem.</p>' +
       // U1 (pedido dos usuários; ESPECIFICACAO.md, seção 16): atalho para as salvaguardas e as perícias durante o jogo, sem os id do bloco 5
       '<h4>Salvaguardas</h4>' + quadroSalvaguardas(d, false) + '<h4>Perícias</h4>' + listaPericias(d, false) };
     if (tipo === 'bp') return { titulo: 'Bônus de Proficiência ' + R.fmtMod(d.bp), fonte: 'Livro do Jogador 2024, p. 13 e 41.', html:
@@ -16100,7 +16141,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       // os livros das opções (X5-6): o de 2024 e os que as opções trazem, na ordem em que aparecem
       var livrosDasOpcoes = eo ? eo.opcoes.reduce(function (l, o) { var n = C.fonteDe(o.fonte ? o : null).nome; return l.indexOf(n) < 0 ? l.concat(n) : l; }, ['Livro do Jogador 2024']) : [];
       return eo ? { titulo: eo.nome, fonte: livrosDasOpcoes.slice(0, -1).join(', ') + (livrosDasOpcoes.length > 1 ? ' e ' : '') + livrosDasOpcoes.slice(-1)[0] + '; a página de cada opção aparece ao tocar nela.', html:
-        '<p class="nota">Toque numa opção para ler. A escolha é feita nas fichas da aba Personagem; ✓ marca as já escolhidas.</p><ul class="lista">' + eo.opcoes.map(function (o) {
+        '<p class="nota">Toque numa opção para ler. A escolha é feita nas fichas da tela Personagem; ✓ marca as já escolhidas.</p><ul class="lista">' + eo.opcoes.map(function (o) {
           return o.texto && o.texto.length ? linhaItem('opcao:' + eo.id + ':' + o.id, o.nome, o.subtitulo || '', eo.escolhidas.indexOf(o.id) >= 0 ? '✓' : '', true, o.marca) : '';
         }).join('') + '</ul>' } : null;
     }
@@ -16305,7 +16346,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       return '<li class="com-botoes"><button type="button" class="item" data-acao="item" data-id="metamagia-talento:' + esc(o.id) + '"><span class="corpo"><span class="titulo">' + esc(nome) +
         '</span><span class="resumo quebra">Toque para ler</span></span><span class="valor">' + o.custo + (o.custo === 1 ? ' ponto' : ' pontos') + '</span></button>' +
         botaoGastar({ recurso: t.recurso, qtd: o.custo }, nome, 'Usar') + '</li>';
-    }).join('') + '</ul>' : '<p class="nota">Escolha as duas opções de Metamagia no bloco 4 (Talentos) da aba Personagem.</p>';
+    }).join('') + '</ul>' : '<p class="nota">Escolha as duas opções de Metamagia no bloco 4 (Talentos) da tela Personagem.</p>';
   }
   function cartaoAdeptoMetamagico(d) {
     var t = d.metamagiaDoTalento;
@@ -16343,7 +16384,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
           return '<li class="com-botoes"><button type="button" class="item" data-acao="item" data-id="opcao:' + esc(meta.id) + ':' + esc(o.id) + '"><span class="corpo"><span class="titulo">' + esc(nome) +
             '</span><span class="resumo quebra">Toque para ler</span></span>' + (o.custo ? '<span class="valor">' + o.custo + (o.custo === 1 ? ' ponto' : ' pontos') + '</span>' : '') + '</button>' +
             (o.custo ? botaoGastar({ recurso: 'pontos-de-feiticaria', qtd: o.custo }, nome, 'Usar') : '') + '</li>';
-        }).join('') + '</ul>' : '<p class="nota">Escolha as opções de Metamagia no bloco 1 da aba Personagem.</p>');
+        }).join('') + '</ul>' : '<p class="nota">Escolha as opções de Metamagia no bloco 1 da tela Personagem.</p>');
     }
     var doTalento = d.metamagiaDoTalento;
     if (doTalento) {
@@ -16367,7 +16408,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   function telaMagias(p, d) {
     var g = d.magia, cl = g.classe, e = d.estado, h = '<section class="cartao"><h2>Conjuração</h2>';
     if (!g.tem) {
-      return h + '<p class="nota">' + (!d.classe ? 'Escolha a classe na aba Personagem: Bardo, Bruxo, Clérigo, Druida, Feiticeiro, Guardião, Mago e Paladino conjuram desde o nível 1; ' +
+      return h + '<p class="nota">' + (!d.classe ? 'Escolha a classe na tela Personagem: Bardo, Bruxo, Clérigo, Druida, Feiticeiro, Guardião, Mago e Paladino conjuram desde o nível 1; ' +
         'Guerreiro, Ladino e Monge, por subclasse, a partir do nível 3.' :
         esc(d.classe.nome) + ' não tem espaços de magia' + (d.classeNivel.temDetalhe ? ', e a espécie e os talentos deste personagem não dão magia.' :
           ' nesta versão: as características desta classe entram numa próxima versão.')) + '</p></section>';
@@ -16543,7 +16584,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   function cartaoCompanheiro(d, g) {
     return '<section class="cartao" id="grupo-companheiro-primal"><h2>' + esc(g.titulo) + '</h2>' +
       listaDeCriaturas(g.fichas, 'comp', function (l) { return { marcas: l.escolhida ? ['a sua'] : [] }; }) +
-      '<p class="nota" style="margin-top:8px">CA e PV já com os seus números. A fera é escolhida na aba Personagem.</p></section>';
+      '<p class="nota" style="margin-top:8px">CA e PV já com os seus números. A fera é escolhida na tela Personagem.</p></section>';
   }
 
   function cartaoMeusMonstros(d, g) {
@@ -16577,7 +16618,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var pericias = R.PERICIAS.filter(function (s) { return d.pericias[s.id].grau > 0; });
     var estado = f.semimorte ? 'semimorte' : f.ativa ? 'na forma' : '';
     return '<section class="cartao" id="grupo-forma-de-lobisomem"><h2>' + esc(g.titulo) + marcaDoLivro(g.marca) + (estado ? ' <span class="estado' + (f.semimorte ? ' falta' : '') + '">' + estado + '</span>' : '') + '</h2>' +
-      '<p class="nota">' + esc(f.tipo + ' ' + f.tamanho + (f.subtipo ? ' (' + f.subtipo + ')' : '')) + '. Atributos da forma: os do texto mais os 2 pontos de cada Aumento no Valor de Atributo, escolhidos na aba Personagem.</p>' +
+      '<p class="nota">' + esc(f.tipo + ' ' + f.tamanho + (f.subtipo ? ' (' + f.subtipo + ')' : '')) + '. Atributos da forma: os do texto mais os 2 pontos de cada Aumento no Valor de Atributo, escolhidos na tela Personagem.</p>' +
       '<div class="numeros">' + caixa('CA', f.ca.total) + caixa('PV', f.pv.atuais + '/' + f.pv.max) + caixa('Dados de Vida', f.dadosVida.livres + '/' + f.dadosVida.total, 'd' + f.dadosVida.dado) +
       caixa('Deslocamento', R.fmtMetros(f.deslocamento)) + '</div>' +
       '<div class="numeros tres" id="forma-atributos">' + R.ATRIBUTOS.map(function (a) {
@@ -16818,7 +16859,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     return '<section class="cartao" id="quadro-companheiro"><h2>' + esc(g.titulo) + ', com os seus números' + (l.escolhida ? ' <span class="estado">a sua fera</span>' : '') + '</h2><table class="tabela">' +
       linhaTabela('Classe de Armadura', String(n.ca)) + linhaTabela('Pontos de Vida', String(n.pv)) + linhaTabela('Deslocamento', n.deslocamento) +
       linhaTabela('Golpe da Fera: ataque', R.fmtMod(n.ataque)) + linhaTabela('Golpe da Fera: dano', n.dano) + '</table>' + contas(n.contas) +
-      '<p class="fonte">' + esc(g.titulo) + ', Livro do Jogador 2024, p. ' + g.pagina + '. A fera é escolhida na aba Personagem.</p></section>';
+      '<p class="fonte">' + esc(g.titulo) + ', Livro do Jogador 2024, p. ' + g.pagina + '. A fera é escolhida na tela Personagem.</p></section>';
   }
 
   function quadroQuemUsa(f) {
@@ -17026,21 +17067,34 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 
   // ---------- desenho ----------
   function desenhar() {
-    var nova = lerRota(), trocouAba = nova.aba !== rota.aba, trocouItem = nova.item !== rota.item, cobria = cobreALista(rota);
+    var p = atual(), d = P.derivar(p), nova = lerRota();
+    // E1-b: sem aba no endereço, abre em Ações; com o formulário guiado por fazer (ficha nova, nível novo), na tela Personagem
+    // e grava a escolha no endereço (revisão da E1): o Fechar de uma gaveta (history.back) volta a ele, e não ao vazio
+    if (!nova.aba) {
+      nova = { aba: guiaLigado && d.guia.ativo ? 'personagem' : 'acoes', item: '' };
+      try { history.replaceState(null, '', location.pathname + location.search + '#' + nova.aba); } catch (e) { /* sem histórico: segue */ }
+    }
+    var trocouAba = nova.aba !== rota.aba, trocouItem = nova.item !== rota.item, cobria = cobreALista(rota);
     if (!cobria && cobreALista(nova)) rolagemMonstros = window.scrollY;   // a volta da ficha devolve a lista ao mesmo ponto
+    // E1: ao entrar na tela Personagem, guarda a rolagem da aba de jogo; ao voltar à mesma aba, devolve
+    if (rota.aba && rota.aba !== 'personagem' && nova.aba === 'personagem') rolagemJogo = window.scrollY;
+    var voltouAoJogo = rota.aba === 'personagem' && nova.aba !== 'personagem' && nova.aba === ultimaAba;
     rota = nova;
+    if (rota.aba !== 'personagem') { ultimaAba = rota.aba; abriuEdicao = false; }
+    document.body.classList.toggle('edicao', rota.aba === 'personagem');
     if (apagando && rota.item.indexOf('ficha/' + apagando + '/') !== 0) apagando = '';
-    var p = atual(), d = P.derivar(p), gt = guiaNaTela(p, d), travada = !!gt && rota.aba !== 'personagem';
+    var gt = guiaNaTela(p, d), travada = !!gt && rota.aba !== 'personagem';
     guiaDesenhado = gt;
     desenharFaixa(p, d);
     desenharAbas(!!gt);
-    // G3c: com o formulário ligado e o personagem pronto, a aba Personagem é o resumo com "Mudar" (4a)
+    // G3c: com o formulário ligado e o personagem pronto, a tela Personagem é o resumo com "Mudar" (4a)
     if (gt || (mudando && mudando.id !== p.id)) mudando = null;
     var resumo = guiaLigado && !gt && rota.aba === 'personagem';
     // ?exemplo=N&guia=resumo&passo=<id> abre o "Mudar" dessa pergunta; passo=bloco:<parte>, o "Ver todos os campos"
     if (resumo && passoDaUrl) { mudando = { id: p.id, passo: passoDaUrl.replace(/^bloco:.*/, ''), bloco: (/^bloco:(.*)$/.exec(passoDaUrl) || [])[1] || '' }; passoDaUrl = ''; }
-    el('tela').innerHTML = travada ? cartaoTravado(gt) : gt ? telaGuia(p, d, gt) : resumo ? (mudando ? telaMudar(p, d) : telaResumo(p, d)) :
-      { personagem: telaPersonagem, acoes: telaAcoes, magias: telaMagias, monstros: telaMonstros, ficha: telaFicha }[rota.aba](p, d);
+    el('tela').innerHTML = travada ? cartaoTravado(gt) : gt ? telaGuia(p, d, gt) : (rota.aba === 'personagem' && !mudando ? voltarAoJogo() : '') +
+      (resumo ? (mudando ? telaMudar(p, d) : telaResumo(p, d)) :
+      { personagem: telaPersonagem, acoes: telaAcoes, magias: telaMagias, monstros: telaMonstros, ficha: telaFicha }[rota.aba](p, d));
     var rp = el('rodape');
     rp.innerHTML = gt && !travada ? rodapeDoGuia(gt, p, d) : resumo && mudando ? rodapeDoMudar() : '';
     rp.hidden = !rp.innerHTML;
@@ -17066,7 +17120,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     passoDesenhado = gt && !travada ? gt.passo.id : '';
     if (passoNovo) window.scrollTo(0, 0);
     else if (rolarPara && el(rolarPara)){ el(rolarPara).scrollIntoView({ block: 'start' }); rolarPara = ''; }
-    else if (trocouAba) window.scrollTo(0, 0);
+    else if (trocouAba) window.scrollTo(0, voltouAoJogo ? rolagemJogo : 0);
     else if (rota.aba === 'monstros' && trocouItem && (cobria || cobreALista(rota))) window.scrollTo(0, cobreALista(rota) ? 0 : rolagemMonstros);
   }
 
@@ -17095,7 +17149,8 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   function valorPV() { var c = el('pv-valor'); return c ? Math.max(0, parseInt(c.value, 10) || 0) : 0; }
 
   var ACOES = {
-    aba: function (b) { irAba(b.getAttribute('data-id')); },
+    aba: function (b) { var id = b.getAttribute('data-id'); if (id === 'personagem') abrirEdicao(); else irAba(id); },
+    'voltar-jogo': voltarDaEdicao,
     // ----- formulário guiado (REGRAS 30; protótipo da G2) -----
     'guia-proximo': function () { andarNoGuia(1); },
     'guia-voltar': function () { andarNoGuia(-1); },

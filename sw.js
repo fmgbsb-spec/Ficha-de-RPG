@@ -1,8 +1,8 @@
-// Service worker gerado por _publicacao-web (pacote_web.ps1) para Ficha D&D v0.19.1.
+// Service worker gerado por _publicacao-web (pacote_web.ps1) para Ficha D&D v0.20.0.
 // Não editar: muda pelo modelo em _publicacao-web\codigo\modelos\sw.js e pelo build.
 // Estratégia: rede primeiro, com prazo de 4000 ms; sem rede (ou rede lenta), a cópia guardada.
 // Assim, com internet o app abre sempre na versão publicada; sem internet, abre a última que foi aberta.
-var CACHE = 'ficha-dnd@0.19.1';   // '@' separa: a limpeza abaixo não alcança o cache de outra página do site
+var CACHE = 'ficha-dnd@0.20.0';   // '@' separa: a limpeza abaixo não alcança o cache de outra página do site
 var ARQUIVOS = ['./', 'index.html', 'manifest.webmanifest',
   'icones/icone-192.png', 'icones/icone-512.png', 'icones/icone-512-mascara.png', 'icones/icone-180.png'];
 var IGNORAR = [];   // subpastas que têm service worker próprio (outras páginas do mesmo site)

@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prova A · Mesa direta</title>
+<style>
+:root { --fundo:#f6f3ee; --papel:#fff; --texto:#222; --marsala:#964f4c; --borda:#cfc6bb; --suave:#6b625a; --vez:#f3e3e2; }
+body { margin:0; font:16px/1.4 system-ui, sans-serif; background:var(--fundo); color:var(--texto); }
+main { max-width:680px; margin:0 auto; padding:16px; }
+h1 { font-size:20px; margin:0 0 4px; }
+h2 { font-size:16px; margin:20px 0 6px; }
+p.sub { margin:0 0 12px; color:var(--suave); font-size:14px; }
+button { font:inherit; padding:8px 12px; min-height:44px; border:1px solid var(--marsala); background:var(--papel);
+  color:var(--marsala); border-radius:6px; cursor:pointer; }
+button.cheio { background:var(--marsala); color:#fff; }
+button.mini { min-width:44px; padding:6px 8px; }
+input { font:inherit; padding:10px; border:1px solid var(--borda); border-radius:6px; width:100%; box-sizing:border-box; }
+label { display:block; font-size:14px; color:var(--suave); margin-top:8px; }
+.linha { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+.grade { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+table { width:100%; border-collapse:collapse; background:var(--papel); }
+td, th { border-bottom:1px solid var(--borda); padding:6px 4px; text-align:left; vertical-align:middle; }
+th { font-size:13px; color:var(--suave); font-weight:600; }
+tr.vez td { background:var(--vez); }
+#estado { font-weight:600; padding:8px 10px; background:var(--papel); border:1px solid var(--borda); border-radius:6px; }
+#codigo { font-size:32px; letter-spacing:4px; font-weight:700; color:var(--marsala); }
+#log { font:12px/1.35 ui-monospace, Consolas, monospace; background:var(--papel); border:1px solid var(--borda);
+  padding:8px; height:200px; overflow:auto; white-space:pre-wrap; }
+pre.cru { font:12px/1.35 ui-monospace, Consolas, monospace; background:var(--papel); border:1px solid var(--borda);
+  padding:8px; overflow:auto; max-height:200px; }
+.oculto { display:none; }
+.aviso { background:#fff7e0; border:1px solid #e2c77a; padding:8px 10px; border-radius:6px; margin:8px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Prova A · Mesa direta entre aparelhos</h1>
+<p class="sub">Teste de conexão do hub da mesa (WebRTC). Não é o app: só mede se os aparelhos se falam.</p>
+
+<section id="escolha">
+  <div class="linha">
+    <button class="cheio" id="btMestre">Sou o mestre</button>
+    <button id="btJogador">Sou jogador</button>
+  </div>
+</section>
+
+<section id="formJogador" class="oculto">
+  <label for="inCodigo">Código da mesa</label>
+  <input id="inCodigo" maxlength="4" autocapitalize="characters" autocomplete="off">
+  <label for="inNome">Nome do personagem</label>
+  <input id="inNome" maxlength="24">
+  <div class="grade">
+    <div><label for="inPv">PV atual</label><input id="inPv" type="number" value="20"></div>
+    <div><label for="inPvMax">PV máximo</label><input id="inPvMax" type="number" value="20"></div>
+    <div><label for="inCa">CA</label><input id="inCa" type="number" value="15"></div>
+  </div>
+  <div class="linha"><button class="cheio" id="btEntrar">Entrar na mesa</button></div>
+</section>
+
+<section id="painel" class="oculto">
+  <div id="estado">—</div>
+  <div id="blocoCodigo" class="oculto">
+    <p>Código da mesa: <span id="codigo"></span></p>
+    <div class="linha"><button id="btLink">Copiar link de entrada</button></div>
+  </div>
+  <div class="linha">
+    <button id="btTela">Manter a tela acesa</button>
+    <button id="btTurno" class="oculto">Próximo turno</button>
+  </div>
+  <div id="avisoMestre" class="aviso oculto"></div>
+
+  <div id="blocoMeuPv" class="oculto">
+    <h2>Meu PV (simula poção ou dano na ficha)</h2>
+    <div class="linha">
+      <button class="mini" data-meu="-5">−5</button><button class="mini" data-meu="-1">−1</button>
+      <strong id="meuPv">—</strong>
+      <button class="mini" data-meu="1">+1</button><button class="mini" data-meu="5">+5</button>
+    </div>
+    <div class="linha"><button id="btTrapaca">Tentar mudar o inimigo (deve ser ignorado)</button></div>
+  </div>
+
+  <h2>Mesa</h2>
+  <table>
+    <thead><tr><th>Ordem</th><th>Nome</th><th>PV</th><th>CA</th><th id="thAcoes"></th></tr></thead>
+    <tbody id="tabela"></tbody>
+  </table>
+
+  <div id="blocoInimigo" class="oculto">
+    <h2>Inimigo (só o mestre vê os números)</h2>
+    <div class="linha">
+      <button class="mini" data-ini="-5">−5</button>
+      <span id="iniPv"></span>
+      <button class="mini" data-ini="5">+5</button>
+      <label style="margin:0"><input type="checkbox" id="ckMostrar" style="width:auto"> mostrar PV e CA aos jogadores</label>
+    </div>
+  </div>
+
+  <h2>Registro</h2>
+  <div id="log"></div>
+  <h2 id="tituloCru" class="oculto">Última mensagem recebida do mestre (para conferir o que chega)</h2>
+  <pre id="cru" class="cru oculto"></pre>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+'use strict';
+var VERSAO = 'prova-a-1';
+var PREFIXO = 'mesadnd-prova-';
+function $(id) { return document.getElementById(id); }
+function mostrar(id, sim) { $(id).classList.toggle('oculto', !sim); }
+function log(t) {
+  var h = new Date().toTimeString().slice(0, 8);
+  $('log').textContent = h + '  ' + t + '\n' + $('log').textContent;
+}
+function estado(t) { $('estado').textContent = t; }
+function guardar(k, v) { try { localStorage.setItem('prova-mesa-' + k, v); } catch (e) {} }
+function ler(k) { try { return localStorage.getItem('prova-mesa-' + k); } catch (e) { return null; } }
+function inteiro(v, d) { var n = parseInt(v, 10); return isFinite(n) ? n : d; }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+if (typeof Peer === 'undefined') {
+  document.body.innerHTML = '<main><h1>Prova A</h1><p class="aviso">A biblioteca de conexão (PeerJS) não carregou. Confira a internet e recarregue.</p></main>';
+}
+
+var peer = null, papel = null;
+// Só para o teste automático no computador: ?servidor=local usa o servidor de apresentação local (porta 9000).
+var OPCOES_PEER = /[?&]servidor=local/.test(location.search)
+  ? { debug: 1, host: '127.0.0.1', port: 9000, path: '/', secure: false }
+  : { debug: 1 };
+
+// ---------- tela acesa ----------
+var trava = null;
+function manterTela() {
+  if (!('wakeLock' in navigator)) { log('Este navegador não mantém a tela acesa (sem Wake Lock).'); return; }
+  navigator.wakeLock.request('screen').then(function (t) {
+    trava = t; log('Tela mantida acesa.');
+    t.addEventListener('release', function () { log('A tela deixou de ser mantida acesa.'); });
+  }).catch(function (e) { log('Não deu para manter a tela acesa: ' + e.message); });
+}
+$('btTela').onclick = manterTela;
+document.addEventListener('visibilitychange', function () {
+  log('Página ' + (document.hidden ? 'escondida (tela bloqueada ou outro app)' : 'visível de novo'));
+  if (!document.hidden) {
+    if (trava && trava.released) manterTela();
+    if (papel === 'jogador') conferirConexao();
+    if (papel === 'mestre' && peer && peer.disconnected && !peer.destroyed) peer.reconnect();
+  }
+});
+
+// ---------- rota da conexão (direta na rede local, pela internet ou por retransmissão) ----------
+function rota(conn) {
+  var pc = conn && conn.peerConnection;
+  if (!pc || !pc.getStats) return Promise.resolve('?');
+  return pc.getStats().then(function (st) {
+    var par = null;
+    st.forEach(function (r) { if (r.type === 'transport' && r.selectedCandidatePairId) par = st.get(r.selectedCandidatePairId); });
+    if (!par) st.forEach(function (r) { if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.selected || r.nominated)) par = r; });
+    if (!par) return '?';
+    var l = st.get(par.localCandidateId), m = st.get(par.remoteCandidateId);
+    var tl = l ? (l.candidateType || '?') : '?', tm = m ? (m.candidateType || '?') : '?';
+    var nome = (tl === 'relay' || tm === 'relay') ? 'retransmitida (TURN)' : (tl === 'host' && tm === 'host') ? 'direta na rede local' : 'direta pela internet';
+    return nome + ' [' + tl + '/' + tm + ']';
+  }).catch(function () { return '?'; });
+}
+
+// ================= MESTRE =================
+var M = { codigo: null, jogadores: {}, conexoes: {}, ordem: [], vez: 0, rodada: 1, n: 0,
+  inimigo: { id: 'ini1', nome: 'Orc', pv: 15, pvMax: 15, ca: 13, mostrar: false }, ultimo: null };
+
+function gerarCodigo() {
+  var L = 'ABCDEFGHJKLMNPQRSTUVWXYZ', a = new Uint32Array(4), c = '';
+  crypto.getRandomValues(a);
+  for (var i = 0; i < 4; i++) c += L[a[i] % L.length];
+  return c;
+}
+
+$('btMestre').onclick = function () {
+  papel = 'mestre';
+  mostrar('escolha', false); mostrar('painel', true); mostrar('blocoCodigo', true);
+  mostrar('btTurno', true); mostrar('blocoInimigo', true);
+  $('thAcoes').textContent = 'Dano / cura';
+  M.codigo = ler('codigo-mestre') || gerarCodigo();
+  M.ordem = [M.inimigo.id];
+  abrirMesa();
+  desenharMestre();
+  setInterval(pingar, 5000);
+};
+
+function abrirMesa() {
+  $('codigo').textContent = M.codigo;
+  estado('Abrindo a mesa…');
+  peer = new Peer(PREFIXO + M.codigo, OPCOES_PEER);
+  peer.on('open', function (id) {
+    guardar('codigo-mestre', M.codigo);
+    estado('Mesa aberta · código ' + M.codigo + ' · ' + Object.keys(M.conexoes).length + ' jogador(es)');
+    log('Servidor de apresentação OK (' + id + ').');
+  });
+  peer.on('connection', receberJogador);
+  peer.on('disconnected', function () {
+    log('Mestre perdeu o servidor de apresentação (quem já está na mesa continua). Tentando de novo…');
+    setTimeout(function () { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000);
+  });
+  peer.on('error', function (e) {
+    log('Erro: ' + e.type + (e.message ? ' · ' + e.message : ''));
+    if (e.type === 'unavailable-id') {
+      log('Código em uso (outra aba aberta?). Gerando outro.');
+      peer.destroy(); M.codigo = gerarCodigo(); abrirMesa();
+    }
+  });
+}
+
+function receberJogador(conn) {
+  conn.on('open', function () { log('Aparelho conectou (' + conn.peer.slice(0, 8) + '…).'); });
+  conn.on('data', function (msg) { tratarMestre(conn, msg); });
+  conn.on('close', function () { soltar(conn, 'saiu'); });
+  conn.on('error', function (e) { log('Erro na conexão: ' + e); });
+}
+
+function soltar(conn, motivo) {
+  for (var jid in M.conexoes) {
+    if (M.conexoes[jid] === conn) {
+      delete M.conexoes[jid];
+      if (M.jogadores[jid]) { M.jogadores[jid].online = false; log(M.jogadores[jid].nome + ' ' + motivo + '.'); }
+    }
+  }
+  desenharMestre(); publicar();
+}
+
+function tratarMestre(conn, msg) {
+  if (!msg || typeof msg !== 'object') return;
+  var j;
+  if (msg.t === 'entrar' && typeof msg.jid === 'string') {
+    var antigo = M.conexoes[msg.jid];
+    if (antigo && antigo !== conn) { try { antigo.close(); } catch (e) {} }
+    M.conexoes[msg.jid] = conn;
+    j = M.jogadores[msg.jid];
+    if (!j) {
+      j = M.jogadores[msg.jid] = { jid: msg.jid, nome: String(msg.nome || 'Jogador').slice(0, 24),
+        pvMax: Math.max(1, inteiro(msg.pvMax, 1)), ca: inteiro(msg.ca, 10) };
+      j.pv = Math.min(Math.max(0, inteiro(msg.pv, j.pvMax)), j.pvMax);
+      M.ordem.push(msg.jid);
+      log(j.nome + ' entrou na mesa.');
+    } else {
+      log(j.nome + ' voltou à mesa (o PV do mestre vale).');
+    }
+    j.online = true; j.rota = '…'; j.ms = null;
+    rota(conn).then(function (r) { j.rota = r; log('Rota com ' + j.nome + ': ' + r); desenharMestre(); });
+    desenharMestre(); publicar();
+    return;
+  }
+  var jid = quemE(conn);
+  j = jid && M.jogadores[jid];
+  if (!j) { log('Mensagem de aparelho que não entrou na mesa: ignorada.'); return; }
+  if (msg.t === 'pong') {
+    j.ms = Date.now() - inteiro(msg.ts, Date.now()); desenharMestre(); return;
+  }
+  if (msg.t === 'meu_pv') {
+    var novo = Math.min(Math.max(0, inteiro(msg.pv, j.pv)), j.pvMax);
+    if (novo === j.pv) return;
+    M.ultimo = { jid: jid, antes: j.pv, depois: novo };
+    j.pv = novo;
+    $('avisoMestre').innerHTML = esc(j.nome) + ' mudou o próprio PV: ' + M.ultimo.antes + ' → ' + novo +
+      ' <button id="btDesfazer">Desfazer</button>';
+    mostrar('avisoMestre', true);
+    $('btDesfazer').onclick = desfazer;
+    log(j.nome + ' mudou o próprio PV para ' + novo + '.');
+    desenharMestre(); publicar();
+    return;
+  }
+  log('Pedido "' + esc(msg.t) + '" de ' + j.nome + ' ignorado: jogador não muda a mesa.');
+}
+
+function quemE(conn) { for (var k in M.conexoes) if (M.conexoes[k] === conn) return k; return null; }
+
+function desfazer() {
+  var u = M.ultimo; if (!u || !M.jogadores[u.jid]) return;
+  M.jogadores[u.jid].pv = u.antes; M.ultimo = null; mostrar('avisoMestre', false);
+  log('Desfeito: ' + M.jogadores[u.jid].nome + ' volta a ' + u.antes + ' PV.');
+  desenharMestre(); publicar();
+}
+
+function visao() {
+  // O que vai para os jogadores. Números do inimigo só se o mestre liberar.
+  var ini = { id: M.inimigo.id, nome: M.inimigo.nome };
+  if (M.inimigo.mostrar) { ini.pv = M.inimigo.pv; ini.pvMax = M.inimigo.pvMax; ini.ca = M.inimigo.ca; }
+  var js = [];
+  for (var k in M.jogadores) {
+    var j = M.jogadores[k];
+    js.push({ jid: j.jid, nome: j.nome, pv: j.pv, pvMax: j.pvMax, ca: j.ca, online: !!j.online });
+  }
+  return { t: 'visao', v: VERSAO, rodada: M.rodada, vez: M.ordem[M.vez] || null, ordem: M.ordem.slice(), jogadores: js, inimigos: [ini] };
+}
+
+function publicar() {
+  var v = visao();
+  for (var k in M.conexoes) { var c = M.conexoes[k]; if (c.open) c.send(v); }
+  estado('Mesa aberta · código ' + M.codigo + ' · ' + Object.keys(M.conexoes).length + ' jogador(es) conectado(s)');
+}
+
+function pingar() {
+  for (var k in M.conexoes) { var c = M.conexoes[k]; if (c.open) c.send({ t: 'ping', ts: Date.now() }); }
+}
+
+function desenharMestre() {
+  var h = '';
+  M.ordem.forEach(function (id, i) {
+    var vez = i === M.vez ? ' class="vez"' : '';
+    if (id === M.inimigo.id) {
+      h += '<tr' + vez + '><td>' + (i + 1) + '</td><td>' + esc(M.inimigo.nome) + ' (inimigo)</td><td>' + M.inimigo.pv + '/' +
+        M.inimigo.pvMax + '</td><td>' + M.inimigo.ca + '</td><td></td></tr>';
+      return;
+    }
+    var j = M.jogadores[id];
+    h += '<tr' + vez + '><td>' + (i + 1) + '</td><td>' + esc(j.nome) + (j.online ? '' : ' · fora') +
+      '<br><small>' + esc(j.rota || '') + (j.ms !== null && j.ms !== undefined ? ' · ' + j.ms + ' ms' : '') + '</small></td><td>' +
+      j.pv + '/' + j.pvMax + '</td><td>' + j.ca + '</td><td>' +
+      '<button class="mini" data-j="' + id + '" data-d="-5">−5</button> <button class="mini" data-j="' + id + '" data-d="5">+5</button></td></tr>';
+  });
+  $('tabela').innerHTML = h;
+  $('iniPv').textContent = M.inimigo.nome + ': ' + M.inimigo.pv + '/' + M.inimigo.pvMax + ' PV · CA ' + M.inimigo.ca;
+}
+
+document.addEventListener('click', function (ev) {
+  var b = ev.target.closest('button'); if (!b) return;
+  if (papel === 'mestre' && b.dataset.j) {
+    var j = M.jogadores[b.dataset.j];
+    j.pv = Math.min(Math.max(0, j.pv + inteiro(b.dataset.d, 0)), j.pvMax);
+    log('Mestre: ' + j.nome + ' agora com ' + j.pv + ' PV.');
+    desenharMestre(); publicar();
+  }
+  if (papel === 'mestre' && b.dataset.ini) {
+    M.inimigo.pv = Math.min(Math.max(0, M.inimigo.pv + inteiro(b.dataset.ini, 0)), M.inimigo.pvMax);
+    desenharMestre(); publicar();
+  }
+  if (papel === 'jogador' && b.dataset.meu) mudarMeuPv(inteiro(b.dataset.meu, 0));
+});
+$('ckMostrar').onchange = function () { M.inimigo.mostrar = this.checked; publicar(); };
+$('btTurno').onclick = function () {
+  M.vez++; if (M.vez >= M.ordem.length) { M.vez = 0; M.rodada++; }
+  desenharMestre(); publicar();
+};
+$('btLink').onclick = function () {
+  var link = location.origin + location.pathname + '?mesa=' + M.codigo;
+  (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(
+    function () { log('Link copiado: ' + link); }, function () { log('Link: ' + link); });
+};
+
+// ================= JOGADOR =================
+var J = { jid: null, nome: '', pv: 20, pvMax: 20, ca: 15, codigo: '', conn: null, timer: null, ultimaMsg: 0, ordem: [], ultima: null };
+
+$('btJogador').onclick = function () {
+  mostrar('escolha', false); mostrar('formJogador', true);
+  $('inNome').value = ler('nome') || '';
+};
+$('btEntrar').onclick = function () {
+  J.codigo = $('inCodigo').value.trim().toUpperCase();
+  J.nome = $('inNome').value.trim() || 'Jogador';
+  J.pvMax = Math.max(1, inteiro($('inPvMax').value, 20));
+  J.pv = Math.min(Math.max(0, inteiro($('inPv').value, J.pvMax)), J.pvMax);
+  J.ca = inteiro($('inCa').value, 15);
+  if (!/^[A-Z]{4}$/.test(J.codigo)) { alert('O código da mesa tem 4 letras.'); return; }
+  J.jid = ler('jid') || ('j' + Math.random().toString(36).slice(2, 10));
+  guardar('jid', J.jid); guardar('nome', J.nome);
+  papel = 'jogador';
+  mostrar('formJogador', false); mostrar('painel', true); mostrar('blocoMeuPv', true);
+  mostrar('tituloCru', true); mostrar('cru', true);
+  $('meuPv').textContent = J.pv + '/' + J.pvMax;
+  criarPeerJogador();
+  setInterval(function () {
+    if (J.conn && J.conn.open && Date.now() - J.ultimaMsg > 15000) {
+      log('Nada do mestre há 15 s: refazendo a conexão.');
+      try { J.conn.close(); } catch (e) {}
+      J.conn = null; agendar(500);
+    }
+  }, 5000);
+};
+
+function criarPeerJogador() {
+  estado('Procurando a mesa ' + J.codigo + '…');
+  peer = new Peer(OPCOES_PEER);
+  peer.on('open', function () { log('Servidor de apresentação OK.'); conectar(); });
+  peer.on('disconnected', function () {
+    log('Perdeu o servidor de apresentação; tentando de novo…');
+    setTimeout(function () { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000);
+  });
+  peer.on('error', function (e) {
+    log('Erro: ' + e.type + (e.message ? ' · ' + e.message : ''));
+    if (e.type === 'peer-unavailable') estado('Mesa ' + J.codigo + ' não encontrada: o app do mestre está aberto? Tentando de novo…');
+    agendar(3000);
+  });
+}
+
+function conectar() {
+  if (J.conn && J.conn.open) return;
+  if (!peer || peer.destroyed) { criarPeerJogador(); return; }
+  if (peer.disconnected) { peer.reconnect(); return; }
+  var c = peer.connect(PREFIXO + J.codigo, { reliable: true });
+  J.conn = c;
+  c.on('open', function () {
+    J.ultimaMsg = Date.now();
+    estado('Na mesa ' + J.codigo);
+    c.send({ t: 'entrar', jid: J.jid, nome: J.nome, pv: J.pv, pvMax: J.pvMax, ca: J.ca });
+    rota(c).then(function (r) { log('Rota com o mestre: ' + r); });
+  });
+  c.on('data', tratarJogador);
+  c.on('close', function () { if (J.conn === c) { J.conn = null; estado('Conexão caiu; voltando…'); agendar(2000); } });
+  c.on('error', function (e) { log('Erro na conexão: ' + e); });
+}
+
+function agendar(ms) { clearTimeout(J.timer); J.timer = setTimeout(conectar, ms); }
+function conferirConexao() { if (!J.conn || !J.conn.open) agendar(300); }
+
+function tratarJogador(msg) {
+  J.ultimaMsg = Date.now();
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.t === 'ping') { J.conn.send({ t: 'pong', ts: msg.ts }); return; }
+  if (msg.t !== 'visao') return;
+  $('cru').textContent = JSON.stringify(msg, null, 1);
+  var eu = null;
+  msg.jogadores.forEach(function (j) { if (j.jid === J.jid) eu = j; });
+  if (eu && eu.pv !== J.pv) { log('O mestre mudou meu PV: ' + J.pv + ' → ' + eu.pv + '.'); J.pv = eu.pv; }
+  $('meuPv').textContent = J.pv + '/' + J.pvMax;
+  var porId = {}; msg.jogadores.forEach(function (j) { porId[j.jid] = j; });
+  msg.inimigos.forEach(function (i) { porId[i.id] = i; i.inimigo = true; });
+  var h = '';
+  msg.ordem.forEach(function (id, n) {
+    var x = porId[id]; if (!x) return;
+    var vez = id === msg.vez ? ' class="vez"' : '';
+    var pv = x.pv !== undefined ? x.pv + '/' + x.pvMax : '—';
+    var ca = x.ca !== undefined ? x.ca : '—';
+    h += '<tr' + vez + '><td>' + (n + 1) + '</td><td>' + esc(x.nome) + (x.inimigo ? ' (inimigo)' : '') +
+      (x.jid === J.jid ? ' · você' : '') + (x.online === false ? ' · fora' : '') + '</td><td>' + pv + '</td><td>' + ca + '</td><td></td></tr>';
+  });
+  $('tabela').innerHTML = h;
+}
+
+function mudarMeuPv(d) {
+  J.pv = Math.min(Math.max(0, J.pv + d), J.pvMax);
+  $('meuPv').textContent = J.pv + '/' + J.pvMax;
+  if (J.conn && J.conn.open) J.conn.send({ t: 'meu_pv', jid: J.jid, pv: J.pv });
+  else log('Sem conexão: o PV muda só aqui até voltar.');
+}
+$('btTrapaca').onclick = function () {
+  if (J.conn && J.conn.open) { J.conn.send({ t: 'dano', alvo: 'ini1', valor: 99 }); log('Pedido de dano no inimigo enviado (o mestre deve ignorar).'); }
+};
+
+// Link com ?mesa=XXXX abre direto no formulário do jogador.
+(function () {
+  var m = /[?&]mesa=([A-Za-z]{4})/.exec(location.search);
+  if (m) { $('btJogador').onclick(); $('inCodigo').value = m[1].toUpperCase(); }
+})();
+</script>
+</body>
+</html>

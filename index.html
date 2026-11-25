@@ -513,7 +513,7 @@ section[id^="bloco-"], #escolha-magias { scroll-margin-top: 140px; }
 }
 #abas button {
   flex: 1; min-width: 0; min-height: 56px; padding: 0 1px; background: none; border: 0; border-top: 3px solid transparent;
-  font-size: 12px; font-weight: 600; color: var(--suave);   /* quatro abas desde a v0.20.0 (90 px cada na tela de 360) */
+  font-size: 12px; font-weight: 600; color: var(--suave);   /* cinco abas desde a v0.21.0, com a Lan (72 px cada na tela de 360) */
 }
 #abas button[aria-current=page] { color: var(--destaque); border-top-color: var(--destaque); }
 #abas button.travada { opacity: .55; }   /* formulário guiado aberto: a aba mostra só o cartão que leva a ele (REGRAS 30.1, 0a) */
@@ -753,6 +753,17 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 .cartao-mestre .mestre-rotulo { margin-top: 12px; }
 .cartao-mestre .mestre-rotulo small { color: var(--suave); }
 
+/* Aba Lan (H3, REGRAS 32): código grande, em maiúsculas (sem espaçar letras, P4); título com a situação ao lado; a vez marcada na margem */
+.lan-codigo { font-size: calc(20px * var(--texto)); font-weight: 700; text-transform: uppercase; }
+#lan > .linha { align-items: baseline; }
+#lan > .linha h2 { flex: 1; }
+#lan > .linha .nota { text-align: right; }
+.lan-mesa .item { padding-left: 18px; position: relative; }
+.lan-mesa li.vez .item::before { content: '▶'; position: absolute; left: 0; color: var(--destaque); font-size: calc(12px * var(--texto)); }
+.lan-mesa li.vez .titulo { color: var(--destaque); }
+.lan-mesa .valor { font-weight: 600; font-size: calc(14px * var(--texto)); }
+.lan-fim { margin-top: 12px; }
+
 @media print {
   #folha.mestre { padding: 10mm; }
   .cartao-mestre { width: 100mm; max-width: none; margin: 0; font-size: 10pt; background: #fff; color: #000; border-color: #000; }
@@ -781,7 +792,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 // A versão é gravada pelo build.ps1, a partir de VERSAO.txt.
 (function (F) {
   'use strict';
-  F.versao = '0.20.0';
+  F.versao = '0.21.0';
 })(window.Ficha = window.Ficha || {});
 </script>
 <script>
@@ -10261,6 +10272,44 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   };
   P.definirTemporarios = function (p, valor) { p.jogo.pvTemporarios = inteiro(valor, 0, 999, 0); };
 
+  // ---------- mesa conectada, aba Lan (docs\REGRAS.md 32; protocolo em docs\MESA.md) ----------
+  // O que vai à mesa: PV da forma normal, temporários, condições do glossário, Exaustão e Salvaguardas contra a Morte
+  // (as contagens só valem com 0 PV, p. 29). Sem classe (PV não definido): null.
+  P.estadoDaMesa = function (p) {
+    var pv = P.derivar(p, SEM_GUIA).pv;
+    if (!pv.definido) return null;
+    return { pv: pv.atuais, pvMax: pv.max, pvTemp: p.jogo.pvTemporarios, condicoes: p.jogo.condicoes.slice(),
+      exaustao: p.jogo.exaustao, morte: { sucessos: pv.morte.sucessos, falhas: pv.morte.falhas } };
+  };
+  // Põe na ficha o estado da mesa (C2): o motor do mestre já aplicou temporários, Dano Maciço e falhas com 0 PV. O PV vai
+  // pelo dano (máximo − atual da mesa), que vale mesmo se o máximo da ficha mudou; Morto na mesa = 3 falhas; condição
+  // nova pela alternarCondicao (a que incapacita encerra a Concentração, p. 364). Na Forma de Lobisomem (C9, 19.6), a
+  // perda de PV vai pela regra da ficha (a forma primeiro) e a cura não entra (K2-9): devolve true, e o app manda à mesa
+  // a diferença que ficou. e: estado da mesa ({ pv, pvMax, pvTemp, condicoes, exaustao, morte, morto }).
+  P.aplicarMesa = function (p, e) {
+    var d = P.derivar(p, SEM_GUIA), forma = !!(d.formaDeLobisomem && d.formaDeLobisomem.ativa), difere = false;
+    if (!d.pv.definido || !e || typeof e.pvMax !== 'number' || typeof e.pv !== 'number') return false;
+    var danoMesa = Math.max(0, e.pvMax - e.pv), mo = e.morte || {};
+    p.jogo.pvTemporarios = inteiro(e.pvTemp, 0, 999, 0);
+    if (forma && danoMesa !== d.pv.dano) {
+      difere = true;
+      if (danoMesa > d.pv.dano) {
+        var temp = p.jogo.pvTemporarios;
+        p.jogo.pvTemporarios = 0;   // os temporários a mesa já descontou
+        P.sofrerDano(p, danoMesa - d.pv.dano);
+        p.jogo.pvTemporarios = temp;
+      }
+    } else {
+      p.jogo.dano = Math.min(d.pv.max, e.morto ? d.pv.max : danoMesa);
+      p.jogo.morte = e.morto ? { sucessos: 0, falhas: 3 } : { sucessos: inteiro(mo.sucessos, 0, 3, 0), falhas: inteiro(mo.falhas, 0, 3, 0) };
+    }
+    var nova = (Array.isArray(e.condicoes) ? e.condicoes : []).filter(function (id) { return id !== 'exaustao' && !!C.condicao(id); });
+    p.jogo.condicoes = p.jogo.condicoes.filter(function (id) { return nova.indexOf(id) >= 0; });
+    nova.forEach(function (id) { if (p.jogo.condicoes.indexOf(id) < 0) P.alternarCondicao(p, id); });
+    P.definirExaustao(p, e.exaustao);
+    return difere;
+  };
+
   // ---------- Forma de Lobisomem (docs\REGRAS.md, 19.6, K2-4, K2-9 e K2-10) ----------
   // Uma casa dos 2 pontos da forma de um nível de aumento; '' desfaz a casa.
   P.definirPontoDaForma = function (p, vaga, indice, atributo) {
@@ -14014,7 +14063,1005 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 })(window.Ficha = window.Ficha || {});
 </script>
 <script>
-// Tela do app: quatro abas, tela Personagem pela engrenagem (v0.20.0), faixa do topo e gaveta. A tela não calcula: lê o resultado de derivar().
+// Mesa conectada (aba "Lan"): protocolo comum da Ficha D&D e do App do Mestre. Sem DOM e sem rede.
+// Desenho, caminhos no banco e decisões: docs\MESA.md. O Mestre copia esta pasta no passo 0 do build dele.
+// Tudo o que chega pela rede passa por um saneamento daqui antes de ser usado (o banco é público para quem tem o código).
+(function (Mesa) {
+  'use strict';
+  var P = Mesa.protocolo = {};
+
+  // Versão do protocolo: muda só quando um app antigo deixa de entender o novo (campo novo opcional não muda).
+  P.VERSAO = 1;
+  P.LETRAS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // 24 letras, sem I e O (confundem com 1 e 0)
+  P.TAM_CODIGO = 4;
+  // Limites de tudo o que entra pela rede (o banco confere os tamanhos de texto: regras_firebase.json)
+  var L = P.LIMITE = { nome: 40, texto: 200, pv: 9999, linhas: 60, condicoes: 20, eventos: 200,
+    cartao: 4000, estado: 2000, evento: 1000, visao: 30000, app: 20 };
+  var ID_CONDICAO = /^[a-z0-9][a-z0-9-]{0,39}$/;
+  var ID_LINHA = /^[A-Za-z0-9_-]{1,24}$/;
+  var UID = /^[A-Za-z0-9_-]{1,64}$/;
+  var ATRIBUTOS = ['for', 'des', 'con', 'int', 'sab', 'car'];
+
+  // ---------- saneamento básico ----------
+  function inteiro(v, min, max, padrao) {
+    var n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+    if (typeof n !== 'number' || !isFinite(n) || n % 1 !== 0) return padrao;
+    return Math.max(min, Math.min(max, n));
+  }
+  function texto(v, max) {
+    if (typeof v === 'number' && isFinite(v)) v = String(v);
+    return typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) : '';
+  }
+  // O Firebase devolve lista com buraco como objeto { 0: …, 2: … }
+  function lista(v) {
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object') {
+      return Object.keys(v).filter(function (k) { return /^\d+$/.test(k); })
+        .sort(function (a, b) { return a - b; }).map(function (k) { return v[k]; });
+    }
+    return [];
+  }
+  function condicoes(v) {
+    var out = [];
+    lista(v).forEach(function (c) {
+      if (typeof c === 'string' && ID_CONDICAO.test(c) && out.indexOf(c) < 0 && out.length < L.condicoes) out.push(c);
+    });
+    return out;
+  }
+  function objeto(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
+  P.inteiro = inteiro;
+  P.texto = texto;
+
+  // JSON em texto: cartão, estado, eventos e visão vão ao banco como texto (tamanho conferido pela regra do banco)
+  P.codificar = function (o) { return JSON.stringify(o); };
+  P.decodificar = function (s, max) {
+    if (typeof s !== 'string' || s.length > max) return null;
+    try { return JSON.parse(s); } catch (e) { return null; }
+  };
+
+  // ---------- código da mesa ----------
+  // Sorteio sem viés: byte ≥ 240 (múltiplo de 24) é descartado. aleatorio(n) → n bytes (padrão: gerador do navegador).
+  P.gerarCodigo = function (aleatorio) {
+    var sorte = aleatorio || function (n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return a; };
+    var c = '', teto = 256 - 256 % P.LETRAS.length;
+    for (var volta = 0; c.length < P.TAM_CODIGO; volta++) {
+      if (volta > 1000) throw new Error('mesa: sorteio do código falhou');
+      var a = sorte(8);
+      for (var i = 0; i < a.length && c.length < P.TAM_CODIGO; i++) if (a[i] < teto) c += P.LETRAS[a[i] % P.LETRAS.length];
+    }
+    return c;
+  };
+  P.codigoValido = function (c) {
+    if (typeof c !== 'string' || c.length !== P.TAM_CODIGO) return false;
+    for (var i = 0; i < c.length; i++) if (P.LETRAS.indexOf(c[i]) < 0) return false;
+    return true;
+  };
+  // Código digitado ("abcd", "AB CD") ou o link do QR (…?mesa=ABCD). Devolve o código ou null.
+  P.lerCodigo = function (t) {
+    var s = t === null || t === undefined ? '' : String(t);
+    var m = /[?&#]mesa=([A-Za-z]+)/.exec(s);
+    var c = (m ? m[1] : s.replace(/[\s.\-]/g, '')).toUpperCase();
+    return P.codigoValido(c) ? c : null;
+  };
+  // Link de entrada (vai no QR): endereço do app da Ficha + ?mesa=CÓDIGO
+  P.link = function (endereco, codigo) { return String(endereco).replace(/[?#].*$/, '') + '?mesa=' + codigo; };
+
+  // 'ok': mesma versão; 'atualizar-este': o outro lado é mais novo; 'atualizar-outro': o outro lado é mais antigo
+  P.compativel = function (p) {
+    var n = inteiro(p, 0, 9999, 0);
+    return n === P.VERSAO ? 'ok' : n > P.VERSAO ? 'atualizar-este' : 'atualizar-outro';
+  };
+
+  // ---------- cartão do personagem (Ficha → Mestre) ----------
+  // Os campos de Mestre.grupo.normalizar, calculados pela Ficha do próprio jogador. d = Ficha.personagem.derivar(p);
+  // folhaMestre = Ficha.folha.mestre(d) (linha "Guerreiro 5 · Campeão · Anão", sentidos e idiomas). Mesmo mapa do
+  // Mestre.grupo.daFicha (mestre-dnd, motor\grupo.js).
+  // pid: id do personagem na ficha (H4: outro personagem do mesmo aparelho não toma a linha do anterior no Grupo).
+  P.cartaoDaFicha = function (d, folhaMestre, pid) {
+    var f = objeto(folhaMestre), pv = objeto(d.pv), salv = {}, imunes = lista(d.imunidades);
+    ATRIBUTOS.forEach(function (a) { salv[a] = d.salvaguardas && d.salvaguardas[a] ? d.salvaguardas[a].bonus : 0; });
+    return P.sanearCartao({
+      nome: d.nome, ca: d.ca ? d.ca.total : null, pvMax: pv.definido ? pv.max : null,
+      iniciativa: d.iniciativa, percepcao: d.percepcaoPassiva, salvaguardas: salv,
+      defesas: {
+        resistencias: lista(d.resistencias).join(', '),
+        imunidades: imunes.filter(function (i) { return i && i.dano; }).map(function (i) { return i.dano; }).join(', '),
+        vulnerabilidades: '',
+        condicoes: imunes.filter(function (i) { return i && !i.dano; }).map(function (i) { return i.nome; }).join(', ')
+      },
+      nivel: d.nivel, linha: f.linha, sentidos: f.sentidos, idiomas: f.idiomas, pid: pid
+    });
+  };
+  // Mesmos limites do Mestre.grupo.normalizar. Sem nome: null.
+  P.sanearCartao = function (c) {
+    var x = objeto(c), s = objeto(x.salvaguardas), df = objeto(x.defesas), salv = {};
+    var nome = texto(x.nome, L.nome);
+    if (!nome) return null;
+    ATRIBUTOS.forEach(function (a) { salv[a] = inteiro(s[a], -20, 40, 0); });
+    return {
+      nome: nome, ca: inteiro(x.ca, 0, 99, null), pvMax: inteiro(x.pvMax, 1, L.pv, null),
+      iniciativa: inteiro(x.iniciativa, -20, 40, 0), percepcao: inteiro(x.percepcao, 0, 99, null), salvaguardas: salv,
+      defesas: { resistencias: texto(df.resistencias, L.texto), imunidades: texto(df.imunidades, L.texto),
+        vulnerabilidades: texto(df.vulnerabilidades, L.texto), condicoes: texto(df.condicoes, L.texto) },
+      nivel: inteiro(x.nivel, 1, 20, null),
+      linha: texto(x.linha, L.texto), sentidos: texto(x.sentidos, L.texto), idiomas: texto(x.idiomas, L.texto),
+      pid: texto(x.pid, L.nome)
+    };
+  };
+
+  // ---------- estado de jogo (os dois lados) ----------
+  // { pv, pvMax, pvTemp, condicoes [ids do glossário], exaustao 0–6, morte { sucessos, falhas } 0–3 }
+  P.sanearEstado = function (e) {
+    var x = objeto(e), m = objeto(x.morte), pvMax = inteiro(x.pvMax, 1, L.pv, null);
+    return {
+      pv: pvMax === null ? null : inteiro(x.pv, 0, pvMax, pvMax), pvMax: pvMax, pvTemp: inteiro(x.pvTemp, 0, L.pv, 0),
+      condicoes: condicoes(x.condicoes), exaustao: inteiro(x.exaustao, 0, 6, 0),
+      morte: { sucessos: inteiro(m.sucessos, 0, 3, 0), falhas: inteiro(m.falhas, 0, 3, 0) }
+    };
+  };
+
+  // ---------- eventos do jogador (variações, não o valor final) ----------
+  // Evento: { n (número, só na chave do banco), pv, pvTemp, exaustao, sucessos, falhas (variações; zero fica de fora),
+  //   mais [condições ganhas], menos [condições perdidas] }. Variação soma com o que o mestre fez ao mesmo tempo.
+  // H4: a variação de PV é a do dano (PV − máximo): subir de nível (máximo e PV sobem juntos) não manda PV; o máximo novo
+  // vai no cartão e o Mestre mantém o dano.
+  var DELTAS = { pv: L.pv, pvTemp: L.pv, exaustao: 6, sucessos: 3, falhas: 3 };
+  P.diferenca = function (antes, depois) {
+    var a = P.sanearEstado(antes), b = P.sanearEstado(depois), ev = {};
+    var dv = a.pv !== null && b.pv !== null ? b.pv - a.pv - (b.pvMax - a.pvMax) : 0;
+    if (dv) ev.pv = dv;
+    if (a.pvTemp !== b.pvTemp) ev.pvTemp = b.pvTemp - a.pvTemp;
+    if (a.exaustao !== b.exaustao) ev.exaustao = b.exaustao - a.exaustao;
+    if (a.morte.sucessos !== b.morte.sucessos) ev.sucessos = b.morte.sucessos - a.morte.sucessos;
+    if (a.morte.falhas !== b.morte.falhas) ev.falhas = b.morte.falhas - a.morte.falhas;
+    var mais = b.condicoes.filter(function (c) { return a.condicoes.indexOf(c) < 0; });
+    var menos = a.condicoes.filter(function (c) { return b.condicoes.indexOf(c) < 0; });
+    if (mais.length) ev.mais = mais;
+    if (menos.length) ev.menos = menos;
+    return Object.keys(ev).length ? ev : null;
+  };
+  P.sanearEvento = function (e) {
+    var x = objeto(e), ev = {};
+    Object.keys(DELTAS).forEach(function (k) {
+      var v = inteiro(x[k], -DELTAS[k], DELTAS[k], 0);
+      if (v) ev[k] = v;
+    });
+    var mais = condicoes(x.mais), menos = condicoes(x.menos).filter(function (c) { return mais.indexOf(c) < 0; });
+    if (mais.length) ev.mais = mais;
+    if (menos.length) ev.menos = menos;
+    return Object.keys(ev).length ? ev : null;
+  };
+  // Aplica a variação sobre o estado atual, com os limites (PV entre 0 e o máximo, Exaustão 0–6, salvaguardas 0–3)
+  P.aplicarEvento = function (estado, evento) {
+    var e = P.sanearEstado(estado), ev = P.sanearEvento(evento);
+    if (!ev) return e;
+    if (ev.pv && e.pv !== null) e.pv = Math.max(0, Math.min(e.pvMax, e.pv + ev.pv));
+    if (ev.pvTemp) e.pvTemp = Math.max(0, Math.min(L.pv, e.pvTemp + ev.pvTemp));
+    if (ev.exaustao) e.exaustao = Math.max(0, Math.min(6, e.exaustao + ev.exaustao));
+    if (ev.sucessos) e.morte.sucessos = Math.max(0, Math.min(3, e.morte.sucessos + ev.sucessos));
+    if (ev.falhas) e.morte.falhas = Math.max(0, Math.min(3, e.morte.falhas + ev.falhas));
+    if (ev.menos) e.condicoes = e.condicoes.filter(function (c) { return ev.menos.indexOf(c) < 0; });
+    (ev.mais || []).forEach(function (c) { if (e.condicoes.indexOf(c) < 0 && e.condicoes.length < L.condicoes) e.condicoes.push(c); });
+    return e;
+  };
+  // O que a Ficha mostra: o estado da mesa (linha da visão) + os eventos dela que o mestre ainda não aplicou (n > ev)
+  P.comPendentes = function (linha, eventos) {
+    var e = P.sanearEstado(linha), ev = inteiro(linha && linha.ev, 0, 1e9, 0);
+    lista(eventos).filter(function (x) { return x && x.n > ev; })
+      .sort(function (a, b) { return a.n - b.n; }).forEach(function (x) { e = P.aplicarEvento(e, x); });
+    return e;
+  };
+
+  // ---------- entrada do jogador (mesas/<código>/entradas/<uid>) ----------
+  // Gravada pelo jogador: { p, app, cartao (texto), estado (texto: estado + ate = último evento já contado nele),
+  //   online, eventos { <n>: texto } }
+  P.entrada = function (cartao, estado, ate, app) {
+    var e = P.sanearEstado(estado);
+    e.ate = inteiro(ate, 0, 1e9, 0);
+    return { p: P.VERSAO, app: texto(app, L.app), cartao: P.codificar(P.sanearCartao(cartao)), estado: P.codificar(e), online: true };
+  };
+  P.lerEntrada = function (v) {
+    var x = objeto(v), est = P.decodificar(x.estado, L.estado), eventos = [];
+    // chaves 1, 2, 3…: o Firebase devolve como lista (posição 0 vazia); Object.keys serve aos dois
+    var ev = x.eventos && typeof x.eventos === 'object' ? x.eventos : {};
+    Object.keys(ev).forEach(function (k) {
+      if (!/^[1-9]\d{0,8}$/.test(k)) return;
+      var e = P.sanearEvento(P.decodificar(ev[k], L.evento));
+      if (e) { e.n = Number(k); eventos.push(e); }
+    });
+    eventos.sort(function (a, b) { return a.n - b.n; });
+    var estado = est ? P.sanearEstado(est) : null;
+    if (estado) estado.ate = inteiro(est.ate, 0, 1e9, 0);
+    return { p: inteiro(x.p, 0, 9999, 0), compat: P.compativel(x.p), app: texto(x.app, L.app),
+      cartao: P.sanearCartao(P.decodificar(x.cartao, L.cartao)), estado: estado, online: x.online === true,
+      eventos: eventos.slice(0, L.eventos), maiorN: eventos.length ? eventos[eventos.length - 1].n : 0 };
+  };
+
+  // ---------- visão da mesa (mestre → todos) ----------
+  // Inimigo sem liberar: só nome e ordem. "estado" vago pelo PV (códigos; o texto de tela é do app).
+  P.estadoVago = function (pv, pvMax, morto) {
+    if (morto || pv === 0) return 'caido';
+    if (pv >= pvMax) return 'ileso';
+    return pv * 2 <= pvMax ? 'muito-ferido' : 'ferido';
+  };
+  function idLinha(v) { return typeof v === 'string' && ID_LINHA.test(v) ? v : null; }
+  function uidValido(v) { return typeof v === 'string' && UID.test(v) ? v : null; }
+  function linhaJogador(x, online) {
+    var e = P.sanearEstado(x), uid = uidValido(x.uid);
+    return { id: idLinha(x.id), tipo: 'jogador', nome: texto(x.nome, L.nome) || '?', uid: uid, ca: inteiro(x.ca, 0, 99, null),
+      pv: e.pv, pvMax: e.pvMax, pvTemp: e.pvTemp, condicoes: e.condicoes, exaustao: e.exaustao, morte: e.morte,
+      morto: x.morto === true, ev: inteiro(x.ev, 0, 1e9, 0), online: online(uid, x) };
+  }
+  // Só o que está na lista branca sai: nada de copiar o objeto do mestre (teste dedicado em testes\mesa.js)
+  function linhaInimigo(x, libera) {
+    var v = { id: idLinha(x.id), tipo: 'inimigo', nome: texto(x.nome, L.nome) || '?' }, e = P.sanearEstado(x);
+    var l = libera(x);
+    if (l.estado && libera === lido) v.estado = lerVago(x.estado);
+    else if (l.estado && e.pvMax !== null) v.estado = P.estadoVago(e.pv, e.pvMax, x.morto === true);
+    if (l.pv && e.pvMax !== null) { v.pv = e.pv; v.pvMax = e.pvMax; v.pvTemp = e.pvTemp; }
+    if (l.ca) { var ca = inteiro(x.ca, 0, 99, null); if (ca !== null) v.ca = ca; }
+    if (l.condicoes) v.condicoes = e.condicoes;
+    if (v.estado === null) delete v.estado;
+    return v;
+  }
+  var VAGOS = ['ileso', 'ferido', 'muito-ferido', 'caido'];
+  function lerVago(s) { return VAGOS.indexOf(s) >= 0 ? s : null; }
+  function liberado(x) {
+    var l = objeto(x.libera);
+    return { estado: l.estado === true, pv: l.pv === true, ca: l.ca === true, condicoes: l.condicoes === true };
+  }
+  // Na leitura, o que veio é o que o mestre liberou (o estado vago já vem pronto)
+  function lido(x) {
+    return { estado: x.estado !== undefined, pv: x.pvMax !== undefined, ca: x.ca !== undefined, condicoes: x.condicoes !== undefined };
+  }
+  // Mais de 60 linhas: saem os últimos inimigos, nunca um jogador (H4), na mesma ordem
+  function cortar(l) {
+    if (l.length <= L.linhas) return l;
+    var jog = function (x) { return !!x && x.tipo === 'jogador'; };
+    var resto = Math.max(0, L.linhas - l.filter(jog).length);
+    return l.filter(function (x) { return jog(x) || resto-- > 0; }).slice(0, L.linhas);
+  }
+  function linhas(lst, online, libera) {
+    var vistas = {};
+    return cortar(lista(lst)).map(function (x) {
+      if (!x || typeof x !== 'object') return null;
+      var v = x.tipo === 'jogador' ? linhaJogador(x, online) : x.tipo === 'inimigo' ? linhaInimigo(x, libera) : null;
+      if (!v || !v.id || vistas[v.id]) return null;
+      vistas[v.id] = true;
+      return v;
+    }).filter(Boolean);
+  }
+  function combate(c, ls) {
+    if (!c || typeof c !== 'object') return null;
+    var vez = ls.some(function (l) { return l.id === c.vez; }) ? c.vez : null;
+    return { rodada: inteiro(c.rodada, 1, 9999, 1), vez: vez };
+  }
+  // m: { app, combate: null | { rodada, vez: id da linha }, linhas: [ jogador { id, tipo:'jogador', nome, uid, ca, pv,
+  //   pvMax, pvTemp, condicoes, exaustao, morte, morto, ev } | inimigo { id, tipo:'inimigo', nome, pv, pvMax, pvTemp, ca,
+  //   condicoes, morto, libera { estado, pv, ca, condicoes } } ] } na ordem de iniciativa (ou do Grupo, sem combate).
+  // presenca: uid → true (ligado). Devolve a visão filtrada que todos podem ler.
+  P.montarVisao = function (m, presenca) {
+    var x = objeto(m), pres = objeto(presenca);
+    var ls = linhas(x.linhas, function (uid) { return uid ? pres[uid] === true : false; }, liberado);
+    return { p: P.VERSAO, app: texto(x.app, L.app), combate: combate(x.combate, ls), linhas: ls };
+  };
+  // Leitura no aparelho do jogador (texto do banco). null se não deu para ler; compat diz se a versão bate.
+  P.lerVisao = function (s) {
+    var x = P.decodificar(s, L.visao);
+    if (!x || typeof x !== 'object') return null;
+    var compat = P.compativel(x.p);
+    if (compat !== 'ok') return { p: inteiro(x.p, 0, 9999, 0), compat: compat, app: texto(x.app, L.app), combate: null, linhas: [] };
+    var ls = linhas(x.linhas, function (uid, y) { return y.online === true; }, lido);
+    return { p: P.VERSAO, compat: 'ok', app: texto(x.app, L.app), combate: combate(x.combate, ls), linhas: ls };
+  };
+  P.minhaLinha = function (visao, uid) {
+    return visao && uid ? visao.linhas.filter(function (l) { return l.tipo === 'jogador' && l.uid === uid; })[0] || null : null;
+  };
+})(window.Mesa = window.Mesa || {});
+</script>
+<script>
+// Mesa conectada (aba "Lan"): ligação pelo Firebase Realtime Database, lado do mestre e lado do jogador. Sem DOM.
+// O SDK do Firebase só é carregado quando a Lan é usada; sem internet o app segue sozinho, como antes (docs\MESA.md).
+// Nos testes, opcoes.modulos troca o Firebase pelo falso (src\testes\mesa_falso.js), que avalia as mesmas regras do banco.
+(function (Mesa) {
+  'use strict';
+  var P = Mesa.protocolo, C = Mesa.conexao = {};
+
+  // Projeto do Francisco (H0, 24/11/2026). A configuração é pública por natureza; quem protege é a regra do banco.
+  C.CONFIG = {
+    apiKey: 'AIzaSyAlVdQha9nu_HvszR-8FjjkIJCcVE9ZAfw',
+    authDomain: 'mesa-dnd-e7e23.firebaseapp.com',
+    databaseURL: 'https://mesa-dnd-e7e23-default-rtdb.firebaseio.com',
+    projectId: 'mesa-dnd-e7e23',
+    storageBucket: 'mesa-dnd-e7e23.firebasestorage.app',
+    messagingSenderId: '148461363177',
+    appId: '1:148461363177:web:9b87b53ea08454c2d53578'
+  };
+  C.SDK = 'https://www.gstatic.com/firebasejs/13.4.0/';
+  C.PRAZO = 20000;          // ms para entrar ou abrir; depois disso vale "sem rede"
+  C.ATRASO_PUBLICAR = 60;   // ms: várias mudanças seguidas do mestre viram uma gravação só
+
+  C.carregarFirebase = function () {
+    return Promise.all(['firebase-app.js', 'firebase-auth.js', 'firebase-database.js'].map(function (a) {
+      return import(C.SDK + a);
+    })).then(function (m) { return { app: m[0], auth: m[1], database: m[2] }; });
+  };
+
+  // Guarda local (código da mesa e número do último evento), com prefixo do app. Falha do navegador não para nada.
+  C.armazem = function (prefixo) {
+    return {
+      ler: function (k) { try { return JSON.parse(localStorage.getItem(prefixo + k)); } catch (e) { return null; } },
+      gravar: function (k, v) { try { localStorage.setItem(prefixo + k, JSON.stringify(v)); } catch (e) { /* sem guarda */ } },
+      apagar: function (k) { try { localStorage.removeItem(prefixo + k); } catch (e) { /* sem guarda */ } }
+    };
+  };
+
+  // Motivo curto de uma falha: 'negado' (regra do banco), 'sem-rede', 'falha'
+  C.motivo = function (e) {
+    var s = String(e && (e.code || '') + ' ' + (e.message || '') || e);
+    if (/permission/i.test(s)) return 'negado';
+    if (/offline|network|unavailable|fetch|import|prazo|timeout/i.test(s)) return 'sem-rede';
+    return 'falha';
+  };
+  function prazo(promessa, ms) {
+    return new Promise(function (ok, erro) {
+      var t = setTimeout(function () { erro(new Error('prazo esgotado (sem rede)')); }, ms);
+      promessa.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); erro(e); });
+    });
+  }
+
+  // Camada fina sobre o SDK (o mesmo código roda com o Firebase de verdade e com o falso dos testes)
+  function ligar(mod, config) {
+    var A = mod.app, D = mod.database;
+    var app = (A.getApps() || []).filter(function (a) { return a.name === 'mesa'; })[0] || A.initializeApp(config, 'mesa');
+    var auth = mod.auth.getAuth(app), db = D.getDatabase(app);
+    function ref(c) { return D.ref(db, c); }
+    var l = {
+      uid: null,
+      entrar: function () {
+        if (l.uid) return Promise.resolve(l.uid);
+        return mod.auth.signInAnonymously(auth).then(function (r) { l.uid = r.user.uid; return l.uid; });
+      },
+      set: function (c, v) { return D.set(ref(c), v); },
+      update: function (c, v) { return D.update(ref(c), v); },
+      remove: function (c) { return D.remove(ref(c)); },
+      get: function (c) { return D.get(ref(c)).then(function (s) { return s.val(); }); },
+      ouvir: function (c, f, erro) { return D.onValue(ref(c), function (s) { f(s.val()); }, erro || function () {}); },
+      // f(tipo 'novo'|'mudou'|'saiu', chave, valor)
+      filhos: function (c, f, erro) {
+        var r = ref(c), e = erro || function () {};
+        var d = [D.onChildAdded(r, function (s) { f('novo', s.key, s.val()); }, e),
+          D.onChildChanged(r, function (s) { f('mudou', s.key, s.val()); }, e),
+          D.onChildRemoved(r, function (s) { f('saiu', s.key, s.val()); }, e)];
+        return function () { d.forEach(function (x) { x(); }); };
+      },
+      aoCair: function (c) { return D.onDisconnect(ref(c)); },
+      carimbo: function () { return D.serverTimestamp(); }
+    };
+    return l;
+  }
+  function conectar(o) {
+    var carregar = o.modulos || C.carregarFirebase;
+    return Promise.resolve().then(carregar).then(function (mod) { return ligar(mod, o.config || C.CONFIG); });
+  }
+
+  // =============================== MESTRE ===============================
+  // o: { app (versão do app), armazem, modulos, aoMudar(m), aoJogador(uid, j, novo), aoSair(uid, j),
+  //      aoEvento(uid, evento), ultimoEvento(uid) → n já aplicado (guardado no estado do app, junto com o PV) }
+  // Jogador novo: aoJogador(…, true) vem antes dos eventos dele; o app que o liga ao Grupo guarda ultimoEvento = j.estado.ate.
+  // Estados: 'fechada' | 'abrindo' | 'aberta' | 'erro' (m.erro = 'negado'|'sem-rede'|'falha'); m.ligado = rede no momento.
+  C.mestre = function (o) {
+    o = o || {};
+    var arm = o.armazem || C.armazem('mesa-mestre-');
+    var m = { estado: 'fechada', ligado: false, codigo: null, erro: null, uid: null, jogadores: {} };
+    var lig = null, desligar = [], fora = {}, vistos = {}, entradaVisao = null, ultimaVisao = null, timer = null;
+    var vez = 0;   // tentativa de abrir em curso; Fechar no meio passa a outra (H4: a mesa reivindicada é apagada)
+    var ultimoEvento = o.ultimoEvento || function (uid) { return vistos[uid] || 0; };
+
+    function avisar() { if (o.aoMudar) o.aoMudar(m); }
+    function mudar(estado, erro) { m.estado = estado; m.erro = erro || null; avisar(); }
+    function base() { return 'mesas/' + m.codigo; }
+    function desligarTudo() {
+      desligar.forEach(function (f) { try { f(); } catch (e) { /* já desligado */ } });
+      desligar = [];
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+
+    function reivindicar(c, tentativa) {
+      if (tentativa >= 8) return Promise.reject(new Error('mesa: nenhum código livre'));
+      var cod = P.codigoValido(c) ? c : P.gerarCodigo();
+      return lig.get('mesas/' + cod + '/mestre').then(function (dono) {
+        if (dono === lig.uid) return { codigo: cod, nova: false };
+        if (dono) return reivindicar(null, tentativa + 1);
+        return lig.set('mesas/' + cod + '/mestre', lig.uid).then(function () { return { codigo: cod, nova: true }; });
+      }, function (e) {
+        if (C.motivo(e) === 'negado') return reivindicar(null, tentativa + 1);
+        throw e;
+      });
+    }
+
+    function tratarEntrada(tipo, uid, val) {
+      if (tipo === 'saiu') {
+        var j0 = m.jogadores[uid];
+        delete m.jogadores[uid];
+        if (j0 && o.aoSair) o.aoSair(uid, j0);
+        avisar(); agendar();
+        return;
+      }
+      if (fora[uid]) return;
+      var e = P.lerEntrada(val);
+      if (!e.cartao) return;    // só presença, ou entrada que sobrou: não é jogador
+      var antes = m.jogadores[uid], novo = !antes;
+      var j = m.jogadores[uid] = { uid: uid, nome: e.cartao.nome, cartao: e.cartao, estado: e.estado, online: e.online,
+        compat: e.compat, app: e.app };
+      if (novo || JSON.stringify(antes.cartao) !== JSON.stringify(j.cartao)) { if (o.aoJogador) o.aoJogador(uid, j, novo); }
+      if (novo && !o.ultimoEvento) vistos[uid] = e.estado ? e.estado.ate : 0;
+      if (e.compat === 'ok') {
+        e.eventos.forEach(function (ev) {
+          if (ev.n <= ultimoEvento(uid)) return;
+          if (o.aoEvento) o.aoEvento(uid, ev);
+          if (!o.ultimoEvento) vistos[uid] = ev.n;
+        });
+      }
+      avisar();
+      if (novo || !antes.online !== !j.online) agendar();
+    }
+
+    // Abre a mesa (a guardada, se houver; novo = true sorteia outra). Devolve o código, ou null se falhou.
+    m.abrir = function (novo) {
+      if (m.estado === 'aberta' || m.estado === 'abrindo') return Promise.resolve(m.codigo);
+      mudar('abrindo');
+      var minha = ++vez, cod = null;
+      // fechada no meio do caminho (ou o prazo passou): a mesa reivindicada some da nuvem
+      function largar() {
+        if (cod && lig) lig.remove('mesas/' + cod).catch(function () { /* sem rede */ });
+        return null;
+      }
+      return prazo(conectar(o).then(function (l) { lig = l; return l.entrar(); }).then(function (uid) {
+        m.uid = uid;
+        return reivindicar(novo ? null : arm.ler('codigo'), 0);
+      }).then(function (r) {
+        cod = r.codigo;
+        if (minha !== vez) return largar();
+        var u = { info: { p: P.VERSAO, app: P.texto(o.app, P.LIMITE.app), aberta: lig.carimbo() } };
+        if (r.nova) { u.entradas = null; u.fora = null; u.visao = null; }   // restos de uma mesa antiga com o mesmo código
+        return lig.update('mesas/' + cod, u);
+      }), C.PRAZO).then(function () {
+        if (minha !== vez || m.estado !== 'abrindo') return largar();
+        m.codigo = cod;
+        arm.gravar('codigo', m.codigo);
+        fora = {}; m.jogadores = {}; ultimaVisao = null;
+        desligar.push(lig.ouvir('.info/connected', function (v) { m.ligado = v === true; avisar(); }));
+        desligar.push(lig.ouvir(base() + '/fora', function (v) {
+          fora = v && typeof v === 'object' ? v : {};
+          Object.keys(fora).forEach(function (uid) { if (m.jogadores[uid]) delete m.jogadores[uid]; });
+          avisar();
+        }));
+        desligar.push(lig.filhos(base() + '/entradas', tratarEntrada));
+        desligar.push(lig.ouvir(base() + '/mestre', function (v) {
+          if (m.estado === 'aberta' && v !== m.uid) { desligarTudo(); arm.apagar('codigo'); m.codigo = null; mudar('fechada'); }
+        }));
+        mudar('aberta');
+        agendar();
+        return m.codigo;
+      }).catch(function (e) {
+        if (minha !== vez) return null;
+        vez++;   // o que ainda vier desta tentativa (prazo esgotado) é largado
+        desligarTudo();
+        m.codigo = null;
+        mudar('erro', C.motivo(e));
+        return null;
+      });
+    };
+    // Ao abrir o app: volta à mesa que estava aberta
+    m.retomar = function () { return arm.ler('codigo') ? m.abrir() : Promise.resolve(null); };
+    m.codigoGuardado = function () { return arm.ler('codigo'); };
+
+    // Fecha a mesa e a apaga da nuvem (os jogadores veem "mesa encerrada")
+    m.fechar = function () {
+      var c = m.codigo, l = lig;
+      vez++;
+      desligarTudo();
+      arm.apagar('codigo');
+      m.codigo = null; m.jogadores = {}; m.ligado = false; fora = {}; ultimaVisao = null;
+      mudar('fechada');
+      return c && l ? l.remove('mesas/' + c).then(function () { return true; }, function () { return false; }) : Promise.resolve(false);
+    };
+    m.novaMesa = function () { return m.fechar().then(function () { return m.abrir(true); }); };
+
+    // Tirar da mesa: o banco recusa a volta dele até readmitir (ou até a Nova mesa)
+    m.tirar = function (uid) {
+      if (m.estado !== 'aberta' || typeof uid !== 'string') return Promise.resolve(false);
+      var u = {};
+      u['fora/' + uid] = true;
+      u['entradas/' + uid] = null;
+      fora[uid] = true;
+      delete m.jogadores[uid];
+      avisar(); agendar();
+      return lig.update(base(), u).then(function () { return true; }, function () { return false; });
+    };
+    m.readmitir = function (uid) {
+      if (m.estado !== 'aberta' || typeof uid !== 'string') return Promise.resolve(false);
+      delete fora[uid];
+      return lig.remove(base() + '/fora/' + uid).then(function () { return true; }, function () { return false; });
+    };
+
+    // Visão da mesa (P.montarVisao): o app chama a cada mudança; vira uma gravação só e só se mudou algo
+    m.publicar = function (entrada) { entradaVisao = entrada; agendar(); };
+    function agendar() {
+      if (timer || m.estado !== 'aberta') return;
+      timer = setTimeout(function () { timer = null; enviar(); }, o.atraso === undefined ? C.ATRASO_PUBLICAR : o.atraso);
+    }
+    function enviar() {
+      if (m.estado !== 'aberta' || !entradaVisao) return;
+      var pres = {};
+      Object.keys(m.jogadores).forEach(function (u) { pres[u] = m.jogadores[u].online; });
+      var v = P.codificar(P.montarVisao(entradaVisao, pres));
+      if (v === ultimaVisao) return;
+      if (v.length > P.LIMITE.visao) { m.erro = 'grande'; avisar(); return; }
+      if (m.erro === 'grande') { m.erro = null; avisar(); }
+      ultimaVisao = v;
+      lig.set(base() + '/visao', { dados: v, ts: lig.carimbo() }).catch(function (e) {
+        ultimaVisao = null; m.erro = C.motivo(e); avisar();
+      });
+    }
+    m.lista = function () {
+      return Object.keys(m.jogadores).map(function (u) { return m.jogadores[u]; })
+        .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    };
+    return m;
+  };
+
+  // =============================== JOGADOR ===============================
+  // o: { app, armazem, modulos, aoMudar(j), aoVisao(visao, minha, mostrado), aoGravado(evento) }
+  //   minha = linha do jogador na visão (null se o mestre ainda não o pôs); mostrado = estado da mesa + eventos pendentes.
+  // Estados: 'fora' | 'entrando' | 'na-mesa' | 'nao-encontrada' | 'versao' (j.erro = 'atualizar-este'|'atualizar-outro')
+  //   | 'tirado' | 'encerrada' | 'erro' (j.erro = 'negado'|'sem-rede'|'falha'|'codigo'|'cartao'); j.ligado = rede.
+  C.jogador = function (o) {
+    o = o || {};
+    var arm = o.armazem || C.armazem('mesa-jogador-');
+    // noBanco: números dos eventos achados no banco ao entrar (H4: a volta automática da Ficha sabe o que já chegou)
+    var j = { estado: 'fora', ligado: false, codigo: null, erro: null, uid: null, visao: null, minha: null, pendentes: [], noBanco: {} };
+    var lig = null, desligar = [], n = 0, presencaArmada = false;
+    var vez = 0;   // tentativa de entrar em curso; Sair no meio passa a outra (H4)
+
+    function avisar() { if (o.aoMudar) o.aoMudar(j); }
+    function mudar(estado, erro) { j.estado = estado; j.erro = erro || null; avisar(); }
+    function base() { return 'mesas/' + j.codigo; }
+    function minhaEntrada() { return base() + '/entradas/' + j.uid; }
+    function desligarTudo() {
+      desligar.forEach(function (f) { try { f(); } catch (e) { /* já desligado */ } });
+      desligar = [];
+    }
+    function guardarN() { arm.gravar('n', n); }
+    function presenca() {
+      if (j.estado !== 'na-mesa') return;
+      var c = minhaEntrada() + '/online';
+      presencaArmada = true;
+      lig.aoCair(c).set(false).then(function () { return lig.set(c, true); }).catch(function () { /* tirado ou mesa fechada */ });
+    }
+    function desarmar(l, caminho) {
+      if (!presencaArmada || !l) return Promise.resolve();
+      presencaArmada = false;
+      return l.aoCair(caminho).cancel().catch(function () { /* sem rede: o banco recusa a escrita depois */ });
+    }
+    // Fim pela mesa (tirado, encerrada, versão): para de ouvir e esquece o código
+    function encerrar(estado, erro) {
+      var l = lig, c = j.codigo && j.uid ? minhaEntrada() + '/online' : null;
+      desligarTudo();
+      arm.apagar('codigo');
+      j.pendentes = []; j.visao = null; j.minha = null;
+      mudar(estado, erro);
+      return desarmar(l, c);
+    }
+
+    function tratarVisao(v) {
+      var vis = P.lerVisao(v && v.dados);
+      if (!vis) return;
+      if (vis.compat !== 'ok') { encerrar('versao', vis.compat); return; }
+      var minha = P.minhaLinha(vis, j.uid);
+      if (minha) {
+        if (minha.ev > n) { n = minha.ev; guardarN(); }
+        var feitos = j.pendentes.filter(function (e) { return e.n <= minha.ev; });
+        if (feitos.length) {
+          j.pendentes = j.pendentes.filter(function (e) { return e.n > minha.ev; });
+          var u = {};
+          feitos.forEach(function (e) { u[e.n] = null; });
+          lig.update(minhaEntrada() + '/eventos', u).catch(function () { /* limpa na próxima */ });
+        }
+      }
+      j.visao = vis; j.minha = minha;
+      if (o.aoVisao) o.aoVisao(vis, minha, minha ? P.comPendentes(minha, j.pendentes) : null);
+    }
+
+    // Entra na mesa: codigo (ou link do QR), cartão (P.cartaoDaFicha) e estado atual da ficha. Devolve true/false.
+    j.entrar = function (codigo, cartao, estado) {
+      var c = P.lerCodigo(codigo), ca = P.sanearCartao(cartao);
+      if (!c) { mudar('erro', 'codigo'); return Promise.resolve(false); }
+      if (!ca) { mudar('erro', 'cartao'); return Promise.resolve(false); }
+      if (j.estado === 'na-mesa' || j.estado === 'entrando') desligarTudo();
+      var minhaVez = ++vez, caminho = null;
+      j.codigo = c; j.pendentes = []; j.visao = null; j.minha = null; j.noBanco = {};
+      n = Math.max(n, P.inteiro(arm.ler('n'), 0, 1e9, 0));
+      mudar('entrando');
+      return prazo(conectar(o).then(function (l) { lig = l; return l.entrar(); }).then(function (uid) {
+        j.uid = uid;
+        return Promise.all([lig.get(base() + '/mestre'), lig.get(base() + '/info'), lig.get(base() + '/fora/' + uid),
+          lig.get(minhaEntrada()), lig.get(base() + '/visao')]);
+      }), C.PRAZO).then(function (r) {
+        if (minhaVez !== vez) return false;   // saiu (ou entrou de novo) no meio do caminho
+        if (!r[0]) { mudar('nao-encontrada'); return false; }
+        var compat = P.compativel(r[1] && r[1].p);
+        if (compat !== 'ok') { mudar('versao', compat); return false; }
+        if (r[2]) { mudar('tirado'); return false; }
+        // Eventos que ficaram no banco (o app fechou antes do mestre aplicar) seguem pendentes; o número não volta atrás
+        var antiga = P.lerEntrada(r[3]), vis = P.lerVisao(r[4] && r[4].dados), minha = P.minhaLinha(vis, j.uid);
+        n = Math.max(n, antiga.maiorN, antiga.estado ? antiga.estado.ate : 0, minha ? minha.ev : 0);
+        antiga.eventos.forEach(function (e) { j.noBanco[e.n] = true; });
+        j.pendentes = antiga.eventos.filter(function (e) { return !minha || e.n > minha.ev; });
+        guardarN();
+        // H4: os já aplicados que sobraram no banco (o app fechou antes de apagar) saem na mesma gravação
+        var u = P.entrada(ca, estado, n, o.app);
+        if (minha) antiga.eventos.forEach(function (e) { if (e.n <= minha.ev) u['eventos/' + e.n] = null; });
+        caminho = minhaEntrada();
+        return lig.update(caminho, u).then(function () {
+          if (minhaVez !== vez || j.estado !== 'entrando') {
+            // saiu no meio do caminho: a entrada não fica no banco (a não ser que já esteja entrando de novo nesta mesa)
+            if (!(j.codigo === c && (j.estado === 'entrando' || j.estado === 'na-mesa'))) lig.remove(caminho).catch(function () { /* sem rede */ });
+            return false;
+          }
+          arm.gravar('codigo', c);
+          mudar('na-mesa');
+          desligar.push(lig.ouvir('.info/connected', function (v) {
+            j.ligado = v === true;
+            if (j.ligado) presenca();
+            avisar();
+          }));
+          desligar.push(lig.ouvir(base() + '/mestre', function (v) { if (!v) encerrar('encerrada'); }));
+          desligar.push(lig.ouvir(base() + '/fora/' + j.uid, function (v) { if (v) encerrar('tirado'); }));
+          desligar.push(lig.ouvir(base() + '/visao', tratarVisao));
+          presenca();
+          return true;
+        });
+      }).catch(function (e) {
+        if (minhaVez !== vez) return false;
+        desligarTudo();
+        mudar('erro', C.motivo(e));
+        return false;
+      });
+    };
+    // Ao abrir a ficha: volta à mesa em que estava
+    j.retomar = function (cartao, estado) {
+      var c = arm.ler('codigo');
+      return c ? j.entrar(c, cartao, estado) : Promise.resolve(false);
+    };
+    j.codigoGuardado = function () { return arm.ler('codigo'); };
+
+    // Mudança feita na ficha (poção, descanso, condição…): vai como evento numerado; vale na hora no app.
+    // Devolve o evento enviado, ou null (nada mudou ou fora da mesa).
+    j.enviar = function (antes, depois) {
+      if (j.estado !== 'na-mesa') return null;
+      var ev = P.diferenca(antes, depois);
+      if (!ev) return null;
+      n = Math.max(n, P.inteiro(arm.ler('n'), 0, 1e9, 0)) + 1; guardarN();   // outra aba no mesmo aparelho não repete o número
+      ev.n = n;
+      j.pendentes.push(ev);
+      var corpo = {};
+      Object.keys(ev).forEach(function (k) { if (k !== 'n') corpo[k] = ev[k]; });
+      // aoGravado(ev): o banco confirmou (a Ficha passa a contar o evento como chegado à mesa; sem rede, só na volta)
+      lig.set(minhaEntrada() + '/eventos/' + ev.n, P.codificar(corpo)).then(function () {
+        if (o.aoGravado) o.aoGravado(ev);
+      }, function () { /* tirado ou mesa fechada */ });
+      return ev;
+    };
+    // Cartão novo (subiu de nível, trocou a armadura): o mestre atualiza o Grupo
+    j.atualizarCartao = function (cartao) {
+      var ca = P.sanearCartao(cartao);
+      if (j.estado !== 'na-mesa' || !ca) return Promise.resolve(false);
+      return lig.update(minhaEntrada(), { cartao: P.codificar(ca) }).then(function () { return true; }, function () { return false; });
+    };
+    // H4: fora do Grupo do mestre (ainda sem linha, Desfazer do "entrou", Tirar do Grupo), a entrada leva o estado de agora
+    // (ate = último evento): o "Pôr no Grupo" do mestre parte dele, sem perder o que mudou enquanto isso
+    j.atualizarEstado = function (estado) {
+      if (j.estado !== 'na-mesa') return Promise.resolve(false);
+      var e = P.sanearEstado(estado);
+      e.ate = n;
+      return lig.update(minhaEntrada(), { estado: P.codificar(e) }).then(function () { return true; }, function () { return false; });
+    };
+    // Sair por vontade própria: some da lista do mestre (o personagem fica no Grupo dele)
+    j.sair = function () {
+      var l = lig, ok = j.estado === 'na-mesa', c = j.codigo && j.uid ? minhaEntrada() : null;
+      vez++;
+      return encerrar('fora').then(function () {
+        j.codigo = null;
+        return ok && c ? l.remove(c).then(function () { return true; }, function () { return false; }) : false;
+      });
+    };
+    return j;
+  };
+})(window.Mesa = window.Mesa || {});
+</script>
+<script>
+// Aba "Lan" da Ficha (mesa conectada, H3; docs\REGRAS.md 32 e docs\MESA.md). Duas partes:
+// - Ficha.lan.ligacao: a ficha ligada à mesa (Mesa.conexao.jogador), sem DOM; testada em src\testes\mesa_ficha.js.
+// - Ficha.lan.tela: o HTML da aba (textos F1–F21 aprovados pelo Francisco em 25/11/2026, sessão H3).
+// Regra de conflito C1–C10 (aprovada em 25/11/2026): a ficha mostra a mesa + as mudanças dela ainda não aplicadas; o
+// jogador manda a variação; mudança do mestre entra sem voltar como evento; na volta automática (C5), o que mudou fora do
+// ar vai como mudança do jogador.
+(function (F) {
+  'use strict';
+  var L = F.lan = {}, P = F.personagem, C = F.catalogo;
+
+  L.REPETIR = 30000;        // ms entre as tentativas de voltar à mesa sem rede (F12)
+  L.ATRASO_CARTAO = 1000;   // ms: nome digitado letra a letra vira uma gravação só do cartão
+
+  function Mz() { return window.Mesa; }
+  function igual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
+  function nomeCondicao(id) { var c = C.condicao(id); return c ? c.nome : id; }
+  function morte(m) { return plural(m.sucessos, 'sucesso', 'sucessos') + ' e ' + plural(m.falhas, 'falha', 'falhas'); }
+
+  // Guarda só na memória (modo exemplo: não volta à mesa ao recarregar)
+  L.memoria = function () {
+    var d = {};
+    return { ler: function (k) { return d[k] === undefined ? null : JSON.parse(d[k]); },
+      gravar: function (k, v) { d[k] = JSON.stringify(v); }, apagar: function (k) { delete d[k]; } };
+  };
+
+  // F18: o que a mesa mudou na ficha, só as partes que mudaram (padrão do L18 do Mestre)
+  L.mudancas = function (a, b) {
+    if (!a || !b) return '';
+    var t = [];
+    if (a.pv !== b.pv) t.push('PV ' + a.pv + ' → ' + b.pv);
+    if (a.pvTemp !== b.pvTemp) t.push('PV temporários ' + a.pvTemp + ' → ' + b.pvTemp);
+    var pos = b.condicoes.filter(function (c) { return a.condicoes.indexOf(c) < 0; });
+    var tirou = a.condicoes.filter(function (c) { return b.condicoes.indexOf(c) < 0; });
+    if (pos.length) t.push('pôs ' + pos.map(nomeCondicao).join(', '));
+    if (tirou.length) t.push('tirou ' + tirou.map(nomeCondicao).join(', '));
+    if (a.exaustao !== b.exaustao) t.push('Exaustão ' + a.exaustao + ' → ' + b.exaustao);
+    if (!igual(a.morte, b.morte)) t.push('contra a Morte ' + morte(b.morte));
+    return t.length ? 'Mesa: ' + t.join('; ') + '.' : '';
+  };
+
+  // =============================== LIGAÇÃO ===============================
+  // o: { app, armazem, modulos, repetir (ms), personagens() → lista da ficha, aoMudar(),
+  //      aoAplicar(p, aviso, mudou) → o app grava (pelo guardar, que chama alterou) e mostra o aviso }
+  L.ligacao = function (o) {
+    var M = Mz(), Pr = M.protocolo;
+    var arm = o.armazem || M.conexao.armazem('mesa-jogador-');
+    // id: personagem que está na mesa (C10); vista: último estado contado (base do próximo envio). Para a volta automática
+    // (C5), guardados no aparelho: base = a mesa da última visão (até o evento baseEv) e envios = os eventos mandados depois
+    // dela. Na volta, o que chegou ao banco (aplicado ou ainda lá) entra na base e não vai de novo (H4).
+    var g = { id: null, automatica: false, fim: null, vista: null, base: null, baseEv: 0, envios: [], cartao: null, vez: null, primeira: false };
+    var relogio = null, relogioCartao = null;
+    var j = M.conexao.jogador({ app: o.app, armazem: arm, modulos: o.modulos, aoMudar: mudou, aoVisao: visao });
+    g.conexao = j;
+
+    function personagem() { return g.id ? o.personagens().filter(function (p) { return p.id === g.id; })[0] || null : null; }
+    function cartaoDe(p) { var d = P.derivar(p); return Pr.cartaoDaFicha(d, F.folha.mestre(d), p.id); }
+    function guardarLocal() { if (g.id) arm.gravar('ficha', { id: g.id, base: g.base, ev: g.baseEv, envios: g.envios }); }
+    function parar() { if (relogio) { clearTimeout(relogio); relogio = null; } }
+    function esquecer() { parar(); arm.apagar('ficha'); g.base = null; g.baseEv = 0; g.envios = []; g.vista = null; g.automatica = false; }
+    function lerEnvios(l) {
+      return (Array.isArray(l) ? l : []).map(function (x) {
+        var ev = Pr.sanearEvento(x), n = Pr.inteiro(x && x.n, 1, 1e9, 0);
+        if (ev && n) ev.n = n;
+        return ev && n ? ev : null;
+      }).filter(Boolean);
+    }
+    // C5: a base guardada + os envios que chegaram à mesa (aplicados, ainda no banco ou mandados nesta volta)
+    function baseDaVolta(minha) {
+      var vistos = {}, l = [];
+      var chegou = function (e) { return e.n <= minha.ev || j.noBanco[e.n] || j.pendentes.some(function (x) { return x.n === e.n; }); };
+      g.envios.filter(chegou).concat(j.pendentes).forEach(function (e) { if (!vistos[e.n]) { vistos[e.n] = true; l.push(e); } });
+      return Pr.comPendentes(Object.assign({}, g.base, { ev: g.baseEv }), l);
+    }
+    function avisarApp() { if (o.aoMudar) o.aoMudar(); }
+
+    function mudou(x) {
+      if (['tirado', 'encerrada', 'versao', 'nao-encontrada'].indexOf(x.estado) >= 0) {
+        // volta automática a uma mesa que acabou: esquece o código (a conexão só esquece quando a mesa avisa)
+        if (g.automatica) { arm.apagar('codigo'); if (x.estado === 'nao-encontrada') g.fim = 'encerrada'; }
+        esquecer();
+      }
+      if (x.estado === 'erro' && g.automatica && (x.erro === 'sem-rede' || x.erro === 'falha')) {
+        parar();
+        relogio = setTimeout(function () { relogio = null; g.tentarDeNovo(); }, o.repetir || L.REPETIR);
+      }
+      if (x.estado === 'na-mesa') parar();
+      avisarApp();
+    }
+
+    function visao(v, minha) {
+      var p = personagem();
+      if (!minha || !p || !P.estadoDaMesa(p)) { avisarApp(); return; }
+      var refAviso = null;   // na volta, o aviso F18 compara com o que a ficha sabia (condições e Exaustão da base)
+      if (g.primeira) {
+        g.primeira = false;
+        // C5: na volta automática, o que mudou na ficha fora do ar vai como mudança do jogador; nada vai se a mesa já
+        // está igual à ficha (o mestre acabou de pô-la no Grupo com o estado dela). Condições e Exaustão não ficam
+        // guardadas no aparelho (REGRAS.md 12.8, U1: a ficha reabre sem elas): contam só PV, temporários e contagens, e
+        // as duas seguem a mesa
+        var agora = P.estadoDaMesa(p);
+        if (g.base) {
+          var b = baseDaVolta(minha);
+          refAviso = agora = Object.assign(agora, { condicoes: b.condicoes.slice(), exaustao: b.exaustao });
+          if (g.automatica && Pr.diferenca(Pr.comPendentes(minha, j.pendentes), agora)) j.enviar(b, agora);
+        }
+      }
+      var mostrado = Pr.comPendentes(minha, j.pendentes);
+      var antes = P.estadoDaMesa(p);
+      var difere = P.aplicarMesa(p, Object.assign({}, mostrado, { morto: minha.morto === true && mostrado.pv === 0 }));
+      var depois = P.estadoDaMesa(p);
+      // C2 sem eco: a próxima mudança do jogador conta a partir do que a ficha ficou; na Forma de Lobisomem (C9) conta a
+      // partir da mesa, e a diferença que a regra da ficha deixou vai à mesa no próximo guardar
+      g.vista = difere ? mostrado : depois;
+      g.base = Pr.sanearEstado(minha); g.baseEv = minha.ev; g.envios = j.pendentes.slice();
+      guardarLocal();
+      var avisos = [], m = L.mudancas(refAviso || antes, depois), c = v.combate, chave = c && c.vez ? c.rodada + '/' + c.vez : null;
+      if (m) avisos.push(m);
+      if (chave && chave !== g.vez && c.vez === minha.id) avisos.push('Sua vez (rodada ' + c.rodada + ').');   // F19
+      g.vez = chave;
+      if (o.aoAplicar) o.aoAplicar(p, avisos.join(' '), difere || !igual(antes, depois));
+      else avisarApp();
+    }
+
+    function comecar(p, automatica) {
+      parar();
+      g.id = p.id; g.automatica = automatica; g.fim = null; g.primeira = true; g.vista = null; g.vez = null;
+      g.base = null; g.baseEv = 0; g.envios = [];
+      g.cartao = cartaoDe(p);
+    }
+    function entrou(ok) {
+      var p = personagem();
+      if (ok && p && !g.vista) g.vista = P.estadoDaMesa(p);
+      if (ok) guardarLocal();
+      return ok;
+    }
+
+    // Entrar pelo botão (C7: vale o estado do Grupo do mestre, se ele já tem o personagem)
+    g.entrar = function (codigo, p) {
+      if (!p || !P.estadoDaMesa(p)) return Promise.resolve(false);
+      comecar(p, false);
+      return j.entrar(codigo, g.cartao, P.estadoDaMesa(p)).then(entrou);
+    };
+    // Ao abrir a ficha: volta à mesa guardada com o personagem que estava nela (C5)
+    g.retomar = function () {
+      var s = arm.ler('ficha'), cod = j.codigoGuardado();
+      if (!cod || !s || typeof s.id !== 'string') { if (cod) arm.apagar('codigo'); return Promise.resolve(false); }
+      var p = o.personagens().filter(function (q) { return q.id === s.id; })[0];
+      if (!p || !P.estadoDaMesa(p)) { arm.apagar('codigo'); esquecer(); return Promise.resolve(false); }   // C10: personagem apagado
+      comecar(p, true);
+      if (s.base) {
+        g.base = Pr.sanearEstado(s.base);
+        g.baseEv = Pr.inteiro(s.ev, 0, 1e9, 1e9);   // guarda da 0.21.0-dev, sem "ev": a base já tinha os confirmados
+        g.envios = lerEnvios(s.envios);
+      }
+      return j.retomar(g.cartao, P.estadoDaMesa(p)).then(entrou);
+    };
+    // A rede voltou (ou passou o prazo): tenta de novo a volta automática
+    g.tentarDeNovo = function () {
+      if (!g.automatica || j.estado !== 'erro') return Promise.resolve(false);
+      return g.retomar();
+    };
+    // A ficha gravou uma mudança (o guardar do app passa sempre por aqui): o que mudou vai à mesa
+    g.alterou = function () {
+      if (!g.id) return null;
+      var p = personagem();
+      if (!p) { if (j.estado === 'na-mesa' || g.automatica) g.sair(); return null; }   // C10: personagem apagado = Sair
+      if (j.estado !== 'na-mesa' || !g.vista) return null;
+      var agora = P.estadoDaMesa(p);
+      if (!agora) return null;
+      var ev = j.enviar(g.vista, agora);
+      g.vista = agora;
+      if (ev) {
+        g.envios = j.pendentes.slice(); guardarLocal();
+        if (!j.minha) j.atualizarEstado(agora);   // fora do Grupo do mestre: o "Pôr no Grupo" parte do estado de agora
+      }
+      // H3-3: o cartão vai 1 s depois da última mudança (o relógio recomeça a cada uma)
+      if (relogioCartao) clearTimeout(relogioCartao);
+      relogioCartao = setTimeout(function () {
+        relogioCartao = null;
+        var q = personagem();
+        if (!q || j.estado !== 'na-mesa') return;
+        var c = cartaoDe(q);
+        if (!igual(c, g.cartao)) { g.cartao = c; j.atualizarCartao(c); }
+      }, o.atrasoCartao === undefined ? L.ATRASO_CARTAO : o.atrasoCartao);
+      return ev;
+    };
+    g.sair = function () {
+      esquecer();
+      g.id = null; g.fim = null;
+      return j.sair();
+    };
+    g.info = function () {
+      var p = personagem();
+      return { estado: g.fim || j.estado, erro: j.erro, codigo: j.codigo, ligado: j.ligado, automatica: g.automatica,
+        id: g.id, nome: p ? p.nome : '', visao: j.visao, minha: j.minha, uid: j.uid };
+    };
+    return g;
+  };
+
+  // =============================== TELA ===============================
+  var VAGO = { ileso: 'ileso', ferido: 'ferido', 'muito-ferido': 'muito ferido', caido: 'caído' };
+  var ERROS = { 'sem-rede': 'Não deu para entrar: sem internet.', negado: 'Não deu para entrar: o banco recusou (regras do Firebase).' };
+
+  function pv(l) { return 'PV ' + l.pv + '/' + l.pvMax + (l.pvTemp ? ' +' + l.pvTemp : ''); }
+  function linhaMesa(l, uid, combate) {
+    var valor = [], baixo = (l.condicoes || []).map(nomeCondicao), vez = !!(combate && combate.vez === l.id);
+    if (l.tipo === 'jogador') {
+      if (l.pvMax !== null) valor.push(pv(l));
+      if (l.ca !== null) valor.push('CA ' + l.ca);
+      if (l.morto) baixo.push('Morto');
+      else if (l.pv === 0) baixo.push(l.morte.sucessos >= 3 ? 'Estável' : 'contra a Morte: ' + plural(l.morte.sucessos, 'sucesso', 'sucessos') + ', ' + plural(l.morte.falhas, 'falha', 'falhas'));
+      if (l.exaustao) baixo.push('Exaustão ' + l.exaustao);
+      if (!l.online) baixo.push('fora do ar');
+    } else {
+      if (l.estado) valor.push(VAGO[l.estado]);
+      if (l.pvMax !== undefined) valor.push(pv(l));
+      if (l.ca !== undefined) valor.push('CA ' + l.ca);
+    }
+    var eu = l.tipo === 'jogador' && !!uid && l.uid === uid;
+    return '<li data-linha="' + esc(l.id) + '"' + (vez ? ' class="vez" aria-current="true"' : '') + '><div class="item fixo">' +
+      '<span class="corpo"><span class="titulo">' + esc(l.nome) + (eu ? ' · você' : '') + '</span>' +
+      (baixo.length ? '<span class="resumo quebra">' + esc(baixo.join(' · ')) + '</span>' : '') + '</span>' +
+      (valor.length ? '<span class="valor">' + esc(valor.join(' · ')) + '</span>' : '') + '</div></li>';
+  }
+  function painel(v, uid) {
+    var c = v.combate, ls = c ? v.linhas : v.linhas.filter(function (l) { return l.tipo === 'jogador'; });
+    return '<h3 id="lan-painel-titulo">' + (c ? 'Combate, rodada ' + c.rodada : 'Grupo') + '</h3>' +
+      '<ul class="lista lan-mesa" id="lan-painel">' + ls.map(function (l) { return linhaMesa(l, uid, c); }).join('') + '</ul>';
+  }
+
+  // Formulário de entrada (F2–F5, F7)
+  function formulario(x, erro) {
+    var tentar = erro === 'sem-rede' || erro === 'negado' || erro === 'falha';
+    return '<p class="nota">Entre com o código que o mestre mostra no App do Mestre. PV, temporários, condições, Exaustão e ' +
+      'Salvaguardas contra a Morte passam a valer na ficha e na mesa. Sem internet, a ficha segue sozinha.</p>' +
+      '<label class="campo"><span>Código da mesa</span><input type="text" id="lan-codigo" class="lan-codigo" maxlength="9" ' +
+      'autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="KPQR" value="' + esc(x.digitado || '') + '"></label>' +
+      (x.pronto ? '<p id="lan-com">Entra com ' + esc(x.nomeAberto) + ' (a ficha aberta).</p>' :
+        '<p class="alerta" id="lan-falta">Crie o personagem (nome e classe) antes de entrar na mesa.</p>') +
+      '<div class="botoes"><button type="button" class="botao" id="lan-entrar" data-acao="lan-entrar"' + (x.pronto ? '' : ' disabled') + '>' +
+      (tentar ? 'Tentar de novo' : 'Entrar na mesa') + '</button></div>' +
+      '<p class="nota" id="lan-iphone">No iPhone, digite o código no app da tela inicial: o QR abre o Safari, que não tem as suas fichas.</p>';
+  }
+  function situacao(t) { return '<p class="alerta" id="lan-situacao">' + esc(t) + '</p>'; }
+
+  // i = ligacao.info(); x = { nomeAberto, pronto, digitado, confirmar (Sair perguntado) }
+  L.tela = function (i, x) {
+    var cod = i.codigo || '', h = '<section class="cartao" id="lan" data-estado="' + esc(i.estado) + '">';
+    if (i.estado === 'na-mesa') {
+      h += '<div class="linha"><h2>Mesa ' + esc(cod) + '</h2><span class="nota" id="lan-ligacao">' +
+        (i.ligado ? 'ligada' : 'sem internet: o que mudar vai quando a rede voltar') + '</span></div>';
+      h += i.minha && i.visao ? '<p id="lan-com">Na mesa com ' + esc(i.nome) + '.</p>' + painel(i.visao, i.uid) :
+        '<p id="lan-com">Esperando o mestre pôr ' + esc(i.nome) + ' no Grupo.</p>';
+      h += x.confirmar ? '<p class="alerta" id="lan-confirma">Sair da mesa? A ficha fica com os valores de agora e segue sozinha. ' +
+        esc(i.nome) + ' continua no Grupo do mestre.</p><div class="botoes"><button type="button" class="botao perigo" data-acao="lan-sair-sim">Sair da mesa</button>' +
+        '<button type="button" class="botao" data-acao="lan-sair-nao">Cancelar</button></div>' :
+        '<div class="botoes lan-fim"><button type="button" class="botao" data-acao="lan-sair">Sair da mesa</button></div>';
+      return h + '</section>';
+    }
+    if (i.estado === 'entrando') return h + '<h2>Mesa do mestre</h2><p id="lan-situacao">Entrando na mesa ' + esc(cod) + '…</p></section>';
+    if (i.estado === 'erro' && i.automatica) {
+      return h + '<h2>Mesa ' + esc(cod) + '</h2>' + situacao('Sem internet: a ficha volta à mesa ' + cod + ' sozinha quando a rede voltar.') +
+        '<div class="botoes lan-fim"><button type="button" class="botao" data-acao="lan-sair-sim">Sair da mesa</button></div></section>';
+    }
+    h += '<h2>Mesa do mestre</h2>';
+    var erro = i.estado === 'erro' ? i.erro : null;
+    if (i.estado === 'tirado') h += situacao('O mestre tirou você da mesa ' + cod + '. A ficha segue sozinha com os valores de agora.');
+    else if (i.estado === 'encerrada') h += situacao('O mestre fechou a mesa ' + cod + '. A ficha segue sozinha com os valores de agora.');
+    else if (i.estado === 'nao-encontrada') h += situacao('A mesa ' + cod + ' não existe ou já foi fechada. Confira o código com o mestre.');
+    else if (i.estado === 'versao') h += situacao(i.erro === 'atualizar-este' ? 'Versão diferente: atualize a Ficha D&D.' : 'Versão diferente: o mestre precisa atualizar o App do Mestre.');
+    else if (erro === 'codigo') h += situacao('O código tem 4 letras, como KPQR.');
+    else if (erro && erro !== 'cartao') h += situacao(ERROS[erro] || 'Não deu para entrar.');
+    return h + formulario(x, erro) + '</section>';
+  };
+})(window.Ficha = window.Ficha || {});
+</script>
+<script>
+// Tela do app: cinco abas (Lan desde a 0.21.0, interface\lan.js), tela Personagem pela engrenagem (v0.20.0), faixa do topo e gaveta. A tela não calcula: lê o resultado de derivar().
 (function (F) {
   'use strict';
   var R = F.regras, P = F.personagem, A = F.armazenamento, C = F.catalogo, K = F.classes, M = F.magias, L = F.folha, Cr = F.criaturas;
@@ -14024,7 +15071,8 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     { id: 'acoes', nome: 'Ações' },
     { id: 'magias', nome: 'Magias' },
     { id: 'monstros', nome: 'Monstros' },
-    { id: 'ficha', nome: 'Ficha' }
+    { id: 'ficha', nome: 'Ficha' },
+    { id: 'lan', nome: 'Lan' }   // H3 (0.21.0): mesa conectada com o App do Mestre (REGRAS 32)
   ];
   var METODOS = [
     { id: 'padrao', nome: 'Conjunto Padrão (15, 14, 13, 12, 10, 8)' },
@@ -14088,9 +15136,34 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   }
 
   function guardar() {
+    if (lan) lan.alterou();   // H3: toda mudança da ficha passa aqui; o que mudou no estado de jogo vai à mesa
     if (modoExemplo) return;
     if (!A.guardar(estado)) avisar('Este aparelho não guardou a ficha. Use "Salvar arquivo" antes de fechar.');
   }
+
+  // ---------- mesa conectada, aba Lan (H3, REGRAS 32; protocolo em docs\MESA.md) ----------
+  // Sem internet ou fora da mesa, a ficha segue sozinha. O roteiro de tela troca o Firebase pelo falso
+  // (window.parent.MESA_TESTE = { modulos, armazem, repetir }); o modo exemplo guarda o código só na memória.
+  var mesaTeste = null;
+  try { mesaTeste = window.parent !== window && window.parent.MESA_TESTE || null; } catch (e) { mesaTeste = null; }
+  var lan = window.Mesa && window.Mesa.conexao && F.lan ? F.lan.ligacao({
+    app: F.versao, modulos: mesaTeste ? mesaTeste.modulos : undefined, repetir: mesaTeste ? mesaTeste.repetir : undefined,
+    atrasoCartao: mesaTeste ? 10 : undefined,
+    armazem: mesaTeste ? mesaTeste.armazem : modoExemplo ? F.lan.memoria() : undefined,
+    personagens: function () { return estado.personagens; },
+    aoMudar: function () { if (rota.aba === 'lan') redesenharMesa(); },
+    aoAplicar: function (p, aviso, mudou) {
+      if (mudou) guardar();
+      if (aviso) avisar(aviso);
+      if (mudou) desenharFaixa(atual(), P.derivar(atual()));
+      redesenharMesa();
+    }
+  }) : null;
+  var lanCodigo = window.Mesa && window.Mesa.protocolo ? window.Mesa.protocolo.lerCodigo(location.search) || '' : '';
+  var lanConfirmar = false, lanPendente = false;
+  // A mesa muda a qualquer hora: com um campo em uso (PV digitado, código), o redesenho espera ele perder o foco
+  function campoEmUso() { var a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }
+  function redesenharMesa() { if (campoEmUso()) lanPendente = true; else desenhar(); }
 
   // ---------- rota: #aba ou #aba/item ----------
   function lerRota() {
@@ -15419,7 +16492,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       return '<div class="guia-numeros" id="guia-numeros">' + caixa('PV', d.pv.definido ? d.pv.max : null) + caixa('CA', d.ca.total) +
         caixa('Ataque', R.fmtMod(at ? at.ataque : ad.ataque), at ? at.nome + (at.danoCurto ? ', ' + at.danoCurto : '') : nomeDesarmado(ad) + (ad.danoCurto ? ', ' + ad.danoCurto : '')) +
         (cds.length ? caixa('CD de magia', cds[0].cd, cds.length > 1 ? cds[0].nome : '') : '') + '</div>' +
-        '<p class="nota">As abas Ações, Magias, Monstros e Ficha abrem com o personagem montado. Qualquer resposta muda depois na tela Personagem, pela engrenagem no alto à direita.</p>';
+        '<p class="nota">As abas Ações, Magias, Monstros, Ficha e Lan abrem com o personagem montado. Qualquer resposta muda depois na tela Personagem, pela engrenagem no alto à direita.</p>';
     }
   };
   var BLOCO_DE_HOJE = { classe: blocoClasse, origem: blocoOrigem, atributos: blocoAtributos, talentos: blocoTalentos, pericias: blocoPericias,
@@ -17065,8 +18138,15 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     });
   }
 
+  // Aba Lan (H3): o HTML vem de Ficha.lan.tela; a ficha aberta é a que entra (C10)
+  function telaLan(p, d) {
+    if (!lan) return '<section class="cartao" id="lan"><h2>Mesa do mestre</h2><p class="nota">Este navegador não abre a mesa.</p></section>';
+    return F.lan.tela(lan.info(), { nomeAberto: p.nome, pronto: d.pv.definido, digitado: lanCodigo, confirmar: lanConfirmar });
+  }
+
   // ---------- desenho ----------
   function desenhar() {
+    lanPendente = false;
     var p = atual(), d = P.derivar(p), nova = lerRota();
     // E1-b: sem aba no endereço, abre em Ações; com o formulário guiado por fazer (ficha nova, nível novo), na tela Personagem
     // e grava a escolha no endereço (revisão da E1): o Fechar de uma gaveta (history.back) volta a ele, e não ao vazio
@@ -17094,7 +18174,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     if (resumo && passoDaUrl) { mudando = { id: p.id, passo: passoDaUrl.replace(/^bloco:.*/, ''), bloco: (/^bloco:(.*)$/.exec(passoDaUrl) || [])[1] || '' }; passoDaUrl = ''; }
     el('tela').innerHTML = travada ? cartaoTravado(gt) : gt ? telaGuia(p, d, gt) : (rota.aba === 'personagem' && !mudando ? voltarAoJogo() : '') +
       (resumo ? (mudando ? telaMudar(p, d) : telaResumo(p, d)) :
-      { personagem: telaPersonagem, acoes: telaAcoes, magias: telaMagias, monstros: telaMonstros, ficha: telaFicha }[rota.aba](p, d));
+      { personagem: telaPersonagem, acoes: telaAcoes, magias: telaMagias, monstros: telaMonstros, ficha: telaFicha, lan: telaLan }[rota.aba](p, d));
     var rp = el('rodape');
     rp.innerHTML = gt && !travada ? rodapeDoGuia(gt, p, d) : resumo && mudando ? rodapeDoMudar() : '';
     rp.hidden = !rp.innerHTML;
@@ -17150,6 +18230,17 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 
   var ACOES = {
     aba: function (b) { var id = b.getAttribute('data-id'); if (id === 'personagem') abrirEdicao(); else irAba(id); },
+    // ----- aba Lan (H3) -----
+    'lan-entrar': function () {
+      var i = lan.info();
+      if (el('lan-codigo')) lanCodigo = el('lan-codigo').value;
+      lanConfirmar = false;
+      lan.entrar(lanCodigo || i.codigo || '', atual()).then(function (ok) { if (ok) avisar('Na mesa ' + lan.info().codigo + '.'); desenhar(); });
+      desenhar();
+    },
+    'lan-sair': function () { lanConfirmar = true; desenhar(); },
+    'lan-sair-nao': function () { lanConfirmar = false; desenhar(); },
+    'lan-sair-sim': function () { lanConfirmar = false; lan.sair().then(desenhar); desenhar(); },
     'voltar-jogo': voltarDaEdicao,
     // ----- formulário guiado (REGRAS 30; protótipo da G2) -----
     'guia-proximo': function () { andarNoGuia(1); },
@@ -17672,6 +18763,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       if (el('guia-proximo')) el('guia-proximo').disabled = !ok;
       if (el('guia-falta')) el('guia-falta').hidden = ok;
     }
+    if (e.target.id === 'lan-codigo') lanCodigo = e.target.value;   // aba Lan: o código digitado, sem redesenhar
     // aba Monstros: a busca filtra a lista e o modificador do atributo aparece, sem redesenhar a tela
     if (e.target.id === 'busca-monstros') { filtroMonstros.busca = e.target.value; aplicarBusca(); }
     if (e.target.id === 'busca-glossario') { buscaGlossario = e.target.value; el('lista-glossario').innerHTML = listaGlossario(); contarGlossario(); }
@@ -17695,6 +18787,14 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   }, true);
   window.addEventListener('hashchange', desenhar);
   window.addEventListener('resize', function () { if (rota.aba === 'ficha') ajustarFolha(); });
+  // aba Lan: Enter no código entra; o redesenho que esperou o campo sai quando ele perde o foco
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.id === 'lan-codigo' && el('lan-entrar') && !el('lan-entrar').disabled) { e.preventDefault(); e.target.blur(); ACOES['lan-entrar'](); }
+  });
+  document.addEventListener('focusout', function () { setTimeout(function () { if (lanPendente && !campoEmUso()) desenhar(); }, 0); });
+  // link do QR (…?mesa=KPQR): abre na aba Lan com o código; o jogador confere a ficha e toca em Entrar
+  if (lanCodigo && !location.hash) { try { history.replaceState(null, '', location.pathname + location.search + '#lan'); } catch (e) { /* segue */ } }
+  if (lan) { lan.retomar(); window.addEventListener('online', function () { lan.tentarDeNovo(); }); }
 
   desenhar();
   // Tempo desde o começo do carregamento até a primeira tela pronta (os dados do livro vêm dentro do arquivo).

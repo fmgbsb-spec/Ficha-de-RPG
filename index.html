@@ -792,7 +792,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 // A versão é gravada pelo build.ps1, a partir de VERSAO.txt.
 (function (F) {
   'use strict';
-  F.versao = '0.21.0';
+  F.versao = '0.22.0';
 })(window.Ficha = window.Ficha || {});
 </script>
 <script>
@@ -9245,6 +9245,8 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
 
   // descansou: na semimorte, já houve o Descanso Longo que deixa voltar dela (19.6, K2-10)
   function formaNova() { return { ativa: false, dano: 0, dadosVidaGastos: 0, semimorte: false, descansou: false }; }
+  // REGRAS 33.2: de onde vem a forma assumida (o id do recurso que ela gasta é o mesmo)
+  var ORIGENS_DA_FERA = ['forma-selvagem', 'transformacao-em-lobo'];
   function novoId(prefixo) { return prefixo + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
 
   P.novo = function () {
@@ -9306,7 +9308,9 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       // outrosDadosGastos (multiclasse, 29.2): Dados de Vida gastos de outro tipo que o da classe inicial, lados → quantos
       jogo: { espacosGastos: {}, dano: 0, pvTemporarios: 0, usos: {}, prodigio: [], usosMagia: {}, concentracao: '', condicoes: [],
         exaustao: 0, inspiracao: false, celeridade: false, dadosVidaGastos: 0, outrosDadosGastos: {}, espacosPacto: 0, espacosCriados: {},
-        forma: formaNova(), morte: { sucessos: 0, falhas: 0 } }
+        forma: formaNova(), morte: { sucessos: 0, falhas: 0 },
+        // naFera (REGRAS 33.2): a forma assumida pela Forma Selvagem ou pela Transformação em Lobo, ou null
+        naFera: null }
     };
   };
 
@@ -9631,6 +9635,10 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     p.monstros = F.criaturas.sanearLista(b.monstros);
     p.formas = unicos((Array.isArray(b.formas) ? b.formas : []).filter(function (id) { return F.criaturas.existe(id, p); })).slice(0, F.criaturas.MAX_FORMAS);
     p.familiar = F.criaturas.existe(b.familiar, p) ? b.familiar : '';
+    // forma assumida (REGRAS 33.2): Fera que existe e origem conhecida; se ela ainda vale, quem diz é derivar()
+    var nf = jogo.naFera && typeof jogo.naFera === 'object' ? jogo.naFera : null;
+    p.jogo.naFera = nf && ORIGENS_DA_FERA.indexOf(nf.origem) >= 0 && F.criaturas.existe(nf.id, p) ?
+      { id: nf.id, origem: nf.origem, temp: inteiro(nf.temp, 0, 999, 0) } : null;
     // favoritos (27.5, RV2-19): textos, sem repetir, só id que existe, até 200 de cada
     var fav = b.favoritos && typeof b.favoritos === 'object' ? b.favoritos : {};
     Object.keys(EXISTE_FAVORITO).forEach(function (tipo) {
@@ -9871,7 +9879,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     });
     p.jogo.espacosGastos = {}; p.jogo.concentracao = ''; p.jogo.dadosVidaGastos = 0; p.jogo.outrosDadosGastos = {};
     p.jogo.espacosPacto = 0; p.jogo.espacosCriados = {};
-    p.pontosDaForma = {}; p.jogo.forma = formaNova();
+    p.pontosDaForma = {}; p.jogo.forma = formaNova(); p.jogo.naFera = null;
   };
   // classeId (multiclasse, 29.4): a classe adicionada dona da escolha; sem ele, a inicial.
   P.definirSubclasse = function (p, id, classeId) {
@@ -10185,7 +10193,8 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     if (!c || id === 'exaustao') return;
     if (i >= 0) { p.jogo.condicoes.splice(i, 1); return; }
     p.jogo.condicoes.push(id);
-    if (M.incapacita(c)) p.jogo.concentracao = '';
+    // Incapacitado encerra a Concentração (p. 364) e a forma assumida (p. 92; REGRAS 33.2)
+    if (M.incapacita(c)) { p.jogo.concentracao = ''; if (p.jogo.naFera) P.voltarDaFera(p); }
   };
   P.definirExaustao = function (p, nivel) { p.jogo.exaustao = inteiro(nivel, 0, MAX_EXAUSTAO, 0); };
   P.alternarInspiracao = function (p) { p.jogo.inspiracao = !p.jogo.inspiracao; };
@@ -10238,6 +10247,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       }
     }
     p.jogo.dano = Math.min(d.pv.max, p.jogo.dano + n);
+    fimDaFera(p, d.pv.definido ? d.pv.max : 0);
   };
   P.curar = function (p, valor) {
     if (p.jogo.forma.ativa) return;
@@ -10270,7 +10280,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var a = pct(atuais);
     return { atuais: a, temporarios: Math.min(pct(temporarios), Math.round(1000 - 10 * a) / 10) };   // a soma não passa de 100 (RV5-4)
   };
-  P.definirTemporarios = function (p, valor) { p.jogo.pvTemporarios = inteiro(valor, 0, 999, 0); };
+  P.definirTemporarios = function (p, valor) { p.jogo.pvTemporarios = inteiro(valor, 0, 999, 0); fimDaFera(p, 0); };
 
   // ---------- mesa conectada, aba Lan (docs\REGRAS.md 32; protocolo em docs\MESA.md) ----------
   // O que vai à mesa: PV da forma normal, temporários, condições do glossário, Exaustão e Salvaguardas contra a Morte
@@ -10307,6 +10317,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     p.jogo.condicoes = p.jogo.condicoes.filter(function (id) { return nova.indexOf(id) >= 0; });
     nova.forEach(function (id) { if (p.jogo.condicoes.indexOf(id) < 0) P.alternarCondicao(p, id); });
     P.definirExaustao(p, e.exaustao);
+    fimDaFera(p, d.pv.max);   // 33.2: o dano ou os temporários da mesa também encerram a forma
     return difere;
   };
 
@@ -10324,9 +10335,54 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var f = P.derivar(p, SEM_GUIA).formaDeLobisomem;
     if (!f) return 'Sem a Forma de Lobisomem.';
     if (!f.ativa && !f.disponivel) return 'Semimorte: a forma volta com "Voltar da semimorte", depois de um Descanso Longo.';
+    if (!f.ativa && p.jogo.naFera) P.voltarDaFera(p);   // REGRAS 33.2: uma forma por vez
     p.jogo.forma.ativa = !f.ativa;
     return '';
   };
+
+  // ---------- forma assumida: Forma Selvagem e Transformação em Lobo (docs\REGRAS.md, 33) ----------
+  // Os números na forma (Cr.naForma, 15.4) se a Fera vale para a origem: forma conhecida da Forma Selvagem (p. 92) ou
+  // Fera da lista da Transformação em Lobo (19.6, K2-18). null se não vale (subiu de nível e trocou a forma, por exemplo).
+  function naFeraDe(d, p, id, origem) {
+    var mo = d.monstros || {}, fs = origem === 'forma-selvagem' ? mo.formaSelvagem : origem === 'transformacao-em-lobo' ? mo.transformacaoEmLobo : null;
+    var lista = !fs ? [] : origem === 'forma-selvagem' ? fs.conhecidas || [] : fs.fichas || [];
+    var f = lista.indexOf(id) >= 0 ? F.criaturas.ficha(id, p) : null;
+    return f ? F.criaturas.naForma(d, f, origem === 'forma-selvagem' ? null : fs) : null;
+  }
+  // Assume a forma (Ação Bônus na Forma Selvagem, p. 92): gasta 1 uso; PV temporários = o maior entre os que tem e os da
+  // forma (p. 29; 33.4 FS-1). Assumir outra com uma ativa vale (p. 92: "até usar Forma Selvagem novamente").
+  // Devolve '' se assumiu, ou o motivo.
+  P.assumirFera = function (p, id, origem) {
+    if (ORIGENS_DA_FERA.indexOf(origem) < 0) return 'Forma desconhecida.';
+    var d = P.derivar(p, SEM_GUIA), n = naFeraDe(d, p, id, origem);
+    if (!n) return origem === 'forma-selvagem' ? 'Ponha a Fera nas formas conhecidas antes.' : 'Esta Fera não está entre as formas.';
+    if (d.formaDeLobisomem && d.formaDeLobisomem.ativa) return 'Na forma de lobisomem: volte à forma normal antes.';
+    if ((d.pv.definido && d.pv.atuais === 0) || p.jogo.condicoes.some(function (c) { return M.incapacita(C.condicao(c)); })) return 'Incapacitado: não dá para assumir a forma.';
+    var r = d.recursos.filter(function (x) { return x.id === origem; })[0];
+    if (!r || r.livres < 1) return 'Sem usos de ' + (r ? r.nome : 'forma') + '.';
+    P.usar(p, origem, 1);
+    var t = Math.min(999, n.pv.temporarios || 0), ganhou = t > p.jogo.pvTemporarios;
+    if (ganhou) p.jogo.pvTemporarios = t;
+    p.jogo.naFera = { id: n.id, origem: origem, temp: ganhou ? t : 0 };
+    return '';
+  };
+  // Sai da forma. Na Transformação em Lobo os temporários que a forma deu somem (Polimorfia, p. 317); na Forma Selvagem
+  // eles ficam (33.4 FS-5).
+  P.voltarDaFera = function (p) {
+    var nf = p.jogo.naFera;
+    if (!nf) return;
+    if (nf.origem === 'transformacao-em-lobo' && nf.temp) p.jogo.pvTemporarios = 0;
+    p.jogo.naFera = null;
+  };
+  // Fim automático (33.2): 0 PV (Inconsciente, p. 92: "ter a condição Incapacitado") e, na Transformação em Lobo, sem
+  // os temporários que a forma deu (p. 317). Chamado depois do dano, da mesa e do valor digitado.
+  function fimDaFera(p, pvMax) {
+    var nf = p.jogo.naFera;
+    if (!nf) return;
+    if ((pvMax && p.jogo.dano >= pvMax) || (nf.origem === 'transformacao-em-lobo' && nf.temp && !p.jogo.pvTemporarios)) {
+      p.jogo.naFera = null;
+    }
+  }
   // Dado de Vida da forma (K2-9): d8 + mod. de Constituição da forma, no mínimo 1; cura só a forma, fora dela e fora
   // da semimorte. Devolve os PV curados (0 se não deu).
   P.gastarDadoVidaDaForma = function (p, rolado) {
@@ -10418,6 +10474,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     p.jogo.exaustao = Math.max(0, p.jogo.exaustao - 1);
     // espaços de pacto (p. 69) e espaços criados com Pontos de Feitiçaria, que somem no Descanso Longo (p. 104)
     p.jogo.espacosPacto = 0; p.jogo.espacosCriados = {};
+    p.jogo.naFera = null;   // REGRAS 33.4 FS-2: o Descanso Longo encerra a forma assumida
     // Forma de Lobisomem (K2-10): os Dados de Vida dela voltam; os PV dela, salvo na semimorte
     p.jogo.forma.dadosVidaGastos = 0;
     if (!p.jogo.forma.semimorte) p.jogo.forma.dano = 0; else p.jogo.forma.descansou = true;
@@ -12071,6 +12128,12 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     saida.pendentes.total = saida.pendentes.grupos.reduce(function (s, g) { return s + g.itens.length; }, 0);
     // aba Monstros (docs\REGRAS.md, seção 15): lê o que já foi derivado (magias, recursos, salvaguardas, perícias)
     saida.monstros = F.criaturas.derivar(p, saida, x);
+    // forma assumida (REGRAS 33.2): vale se a Fera ainda é forma dele; a CA em uso vai à mesa (33.3; FS-4: a da Forma
+    // de Lobisomem ativa também). A folha impressa segue com ca.total.
+    var nf = p.jogo.naFera, nfn = nf ? naFeraDe(saida, p, nf.id, nf.origem) : null;
+    saida.naFera = nfn ? { id: nf.id, origem: nf.origem, nome: nfn.nome, ca: nfn.ca.valor, caDe: nfn.ca.de } : null;
+    ca.emUso = formaDeLobisomem && formaDeLobisomem.ativa ? formaDeLobisomem.ca.total :
+      saida.naFera && saida.naFera.ca !== null ? saida.naFera.ca : ca.total;
     if (!(opcoes && opcoes.semGuia)) saida.guia = guiaDe(p, saida);
     return saida;
   };
@@ -14161,7 +14224,9 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var f = objeto(folhaMestre), pv = objeto(d.pv), salv = {}, imunes = lista(d.imunidades);
     ATRIBUTOS.forEach(function (a) { salv[a] = d.salvaguardas && d.salvaguardas[a] ? d.salvaguardas[a].bonus : 0; });
     return P.sanearCartao({
-      nome: d.nome, ca: d.ca ? d.ca.total : null, pvMax: pv.definido ? pv.max : null,
+      // REGRAS 33.3 da ficha: a CA em uso (na forma, a da forma) e o nome da forma ('' fora dela)
+      nome: d.nome, ca: d.ca ? (typeof d.ca.emUso === 'number' ? d.ca.emUso : d.ca.total) : null, pvMax: pv.definido ? pv.max : null,
+      forma: d.formaDeLobisomem && d.formaDeLobisomem.ativa ? 'lobisomem' : d.naFera ? d.naFera.nome : '',
       iniciativa: d.iniciativa, percepcao: d.percepcaoPassiva, salvaguardas: salv,
       defesas: {
         resistencias: lista(d.resistencias).join(', '),
@@ -14179,7 +14244,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     if (!nome) return null;
     ATRIBUTOS.forEach(function (a) { salv[a] = inteiro(s[a], -20, 40, 0); });
     return {
-      nome: nome, ca: inteiro(x.ca, 0, 99, null), pvMax: inteiro(x.pvMax, 1, L.pv, null),
+      nome: nome, ca: inteiro(x.ca, 0, 99, null), pvMax: inteiro(x.pvMax, 1, L.pv, null), forma: texto(x.forma, L.nome),
       iniciativa: inteiro(x.iniciativa, -20, 40, 0), percepcao: inteiro(x.percepcao, 0, 99, null), salvaguardas: salv,
       defesas: { resistencias: texto(df.resistencias, L.texto), imunidades: texto(df.imunidades, L.texto),
         vulnerabilidades: texto(df.vulnerabilidades, L.texto), condicoes: texto(df.condicoes, L.texto) },
@@ -14289,6 +14354,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
   function linhaJogador(x, online) {
     var e = P.sanearEstado(x), uid = uidValido(x.uid);
     return { id: idLinha(x.id), tipo: 'jogador', nome: texto(x.nome, L.nome) || '?', uid: uid, ca: inteiro(x.ca, 0, 99, null),
+      forma: texto(x.forma, L.nome),   // REGRAS 33.3 da ficha: '' fora de forma
       pv: e.pv, pvMax: e.pvMax, pvTemp: e.pvTemp, condicoes: e.condicoes, exaustao: e.exaustao, morte: e.morte,
       morto: x.morto === true, ev: inteiro(x.ev, 0, 1e9, 0), online: online(uid, x) };
   }
@@ -14891,7 +14957,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
         }
       }
       var mostrado = Pr.comPendentes(minha, j.pendentes);
-      var antes = P.estadoDaMesa(p);
+      var antes = P.estadoDaMesa(p), fera = p.jogo.naFera ? P.derivar(p).naFera : null;   // REGRAS 33.2: a mesa pode encerrar a forma
       var difere = P.aplicarMesa(p, Object.assign({}, mostrado, { morto: minha.morto === true && mostrado.pv === 0 }));
       var depois = P.estadoDaMesa(p);
       // C2 sem eco: a próxima mudança do jogador conta a partir do que a ficha ficou; na Forma de Lobisomem (C9) conta a
@@ -14901,9 +14967,11 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       guardarLocal();
       var avisos = [], m = L.mudancas(refAviso || antes, depois), c = v.combate, chave = c && c.vez ? c.rodada + '/' + c.vez : null;
       if (m) avisos.push(m);
+      var acabou = !!fera && !p.jogo.naFera;
+      if (acabou) avisos.push('A forma de ' + fera.nome + ' acabou.');   // texto T5
       if (chave && chave !== g.vez && c.vez === minha.id) avisos.push('Sua vez (rodada ' + c.rodada + ').');   // F19
       g.vez = chave;
-      if (o.aoAplicar) o.aoAplicar(p, avisos.join(' '), difere || !igual(antes, depois));
+      if (o.aoAplicar) o.aoAplicar(p, avisos.join(' '), difere || acabou || !igual(antes, depois));
       else avisarApp();
     }
 
@@ -14992,7 +15060,7 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var valor = [], baixo = (l.condicoes || []).map(nomeCondicao), vez = !!(combate && combate.vez === l.id);
     if (l.tipo === 'jogador') {
       if (l.pvMax !== null) valor.push(pv(l));
-      if (l.ca !== null) valor.push('CA ' + l.ca);
+      if (l.ca !== null) valor.push('CA ' + l.ca + (l.forma ? ' (' + l.forma + ')' : ''));   // REGRAS 33.3, texto T9
       if (l.morto) baixo.push('Morto');
       else if (l.pv === 0) baixo.push(l.morte.sucessos >= 3 ? 'Estável' : 'contra a Morte: ' + plural(l.morte.sucessos, 'sucesso', 'sucessos') + ', ' + plural(l.morte.falhas, 'falha', 'falhas'));
       if (l.exaustao) baixo.push('Exaustão ' + l.exaustao);
@@ -15326,6 +15394,8 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     };
     // na Forma de Lobisomem (REGRAS 19.6, K2-9), a faixa mostra os PV e a CA da forma, com os PV normais embaixo
     var lb = d.formaDeLobisomem && d.formaDeLobisomem.ativa ? d.formaDeLobisomem : null;
+    // forma assumida (REGRAS 33, texto T6): a linha diz a forma e a CA é a da forma; os PV seguem os seus
+    var nf = !lb && d.naFera ? d.naFera : null;
     // RV3-1 e RV3-5: barra de PV embaixo do número; com 0 PV, o estado dos Salvaguardas contra a Morte
     var barra = !d.pv.definido ? '' : lb ? barraPv(P.barraPv(lb.pv.atuais, lb.pv.max, 0)) : barraPv(d.pv.barra);
     var embaixo = d.pv.morte.ativa ? (d.pv.morto ? 'Morto' : d.pv.morte.estavel ? 'Estável' : 'Inconsciente') :
@@ -15334,10 +15404,10 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     var naEdicao = rota.aba === 'personagem';
     el('faixa').innerHTML = '<div class="faixa-topo"><div class="faixa-nome" id="faixa-nome">' + esc(p.nome) + '</div>' +
       '<button type="button" id="engrenagem" data-acao="aba" data-id="personagem" aria-label="Editar personagem"' + (naEdicao ? ' aria-current="page"' : '') + '>' + ENGRENAGEM + '</button></div>' +
-      '<div class="faixa-linha">' + esc(sub + (lb ? ' · na forma de lobisomem' : '')) + '</div><div class="faixa-numeros">' +
+      '<div class="faixa-linha">' + esc(sub + (lb ? ' · na forma de lobisomem' : nf ? ' · na forma de ' + nf.nome : '')) + '</div><div class="faixa-numeros">' +
       (lb ? numero('pv', 'PV forma', lb.pv.atuais + '/' + lb.pv.max, '<small>normal ' + pv + '</small>' + barra) :
         numero('pv', 'PV', pv, (embaixo ? '<small>' + embaixo + '</small>' : '') + barra)) +
-      numero('ca', lb ? 'CA forma' : 'CA', String(lb ? lb.ca.total : d.ca.total)) +
+      numero('ca', lb || nf ? 'CA forma' : 'CA', String(d.ca.emUso)) +
       numero('bp', 'Proficiência', R.fmtMod(d.bp)) +
       numero('iniciativa', 'Iniciativa', R.fmtMod(d.iniciativa)) + '</div>';
   }
@@ -17158,7 +17228,9 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
         '<h4>PV máximos</h4>' + conta(d.pv.parcelas, d.pv.max, 'PV máximos', false) + pvRolados(d) };
     }
     if (tipo === 'ca') return { titulo: 'Classe de Armadura', fonte: 'Livro do Jogador 2024, p. 41 e 219.', html: (d.formaDeLobisomem && d.formaDeLobisomem.ativa ? '<h4>Na forma de lobisomem</h4>' + conta(d.formaDeLobisomem.ca.parcelas, d.formaDeLobisomem.ca.total, 'CA na forma', false) +
-        avisos(d.formaDeLobisomem.ca.avisos) + '<p class="nota">Salvaguardas e perícias da forma: aba Monstros, cartão ' + esc(d.formaDeLobisomem.nome) + '.</p><h4>Na forma normal</h4>' : '') +
+        avisos(d.formaDeLobisomem.ca.avisos) + '<p class="nota">Salvaguardas e perícias da forma: aba Monstros, cartão ' + esc(d.formaDeLobisomem.nome) + '.</p><h4>Na forma normal</h4>' :
+        // forma assumida (REGRAS 33, texto T7)
+        d.naFera && d.naFera.ca !== null ? '<h4>Na forma de ' + esc(d.naFera.nome) + '</h4><p>CA ' + d.naFera.ca + ': ' + (d.naFera.caDe === 'lua' ? 'a do Círculo da Lua' : 'a da Fera') + '.</p><h4>Na forma normal</h4>' : '') +
       conta(d.ca.parcelas, d.ca.total, 'Classe de Armadura', false) + avisos(d.ca.avisos) +
       // várias formas de calcular a CA (multiclasse, p. 44; MC-C, MC2-9): vale a maior; as outras, com a CA que dariam
       (d.ca.alternativas && d.ca.alternativas.length ? '<p class="nota" id="ca-alternativas">Só uma forma de calcular a CA vale por vez; o app usa a maior (p. 44). As outras: ' +
@@ -17860,7 +17932,8 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
         '<p class="nota">Nenhuma perícia com proficiência, nem sua nem da Fera.</p>') +
       '<p class="nota" style="margin-top:8px">Em salvaguarda e em perícia vale o maior número entre o seu e o do bloco da Fera; em destaque, as salvaguardas em que você é proficiente.</p>' +
       n.notas.map(notaDoLivro).join('') +
-      '<div class="botoes" style="margin-top:10px"><button type="button" class="botao' + (conhecida ? '' : ' principal') + '" data-acao="forma" data-id="' + esc(f.id) + '"' + (!conhecida && cheia ? ' disabled' : '') + '>' +
+      '<div class="botoes" style="margin-top:10px">' + (conhecida ? botaoFera(d, f.id, 'forma-selvagem') : '') +
+      '<button type="button" class="botao' + (conhecida ? '' : ' principal') + '" data-acao="forma" data-id="' + esc(f.id) + '"' + (!conhecida && cheia ? ' disabled' : '') + '>' +
       (conhecida ? 'Tirar das formas conhecidas' : 'Pôr nas formas conhecidas') + '</button></div>' +
       (!conhecida && cheia ? '<p class="nota" style="margin-top:8px">Você já conhece ' + fs.max + ' de ' + fs.max + ' formas: tire uma para trocar.</p>' : '') +
       '<p class="fonte">Forma Selvagem, Livro do Jogador 2024, p. ' + n.pagina + '.</p></section>';
@@ -17887,7 +17960,15 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
         '<p class="nota">Nenhuma perícia com proficiência, nem sua nem da Fera.</p>') +
       '<p class="nota" style="margin-top:8px">Em salvaguarda e em perícia vale o maior número entre o seu e o do bloco da Fera, como na Forma Selvagem (regra da mesa).</p>' +
       n.notas.map(function (x) { return '<p class="nota recuo">' + esc(x) + '</p>'; }).join('') +
+      '<div class="botoes" style="margin-top:10px">' + botaoFera(d, f.id, 'transformacao-em-lobo') + '</div>' +
       '<p class="fonte">' + esc(g.fonte + '. ' + g.aviso + '.') + '</p></section>';
+  }
+
+  // Forma assumida (REGRAS 33; textos T1 e T2 com OK dele, 2026-11-25): nesta forma, "Voltar"; fora, "Assumir"
+  function botaoFera(d, id, origem) {
+    var nesta = !!d.naFera && d.naFera.id === id && d.naFera.origem === origem;
+    return '<button type="button" class="botao' + (nesta ? '' : ' principal') + '" data-acao="' + (nesta ? 'fera-voltar' : 'fera-assumir') + '" data-id="' + esc(id) + '" data-origem="' + origem + '">' +
+      (nesta ? 'Voltar à forma normal' : 'Assumir esta forma') + '</button>';
   }
 
   function quadroFamiliar(d, f) {
@@ -18204,7 +18285,13 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
     else if (rota.aba === 'monstros' && trocouItem && (cobria || cobreALista(rota))) window.scrollTo(0, cobreALista(rota) ? 0 : rolagemMonstros);
   }
 
-  function alterar(fn) { fn(atual()); guardar(); desenhar(); }
+  // REGRAS 33 (texto T5 com OK dele): a forma assumida que acabou sozinha (0 PV, Incapacitado, descanso, Lobo sem
+  // temporários) avisa; quem sai pelo botão troca o aviso pelo dele
+  function alterar(fn) {
+    var p = atual(), nf = p.jogo.naFera ? P.derivar(p).naFera : null;
+    fn(p); guardar(); desenhar();
+    if (nf && !atual().jogo.naFera) avisar('A forma de ' + nf.nome + ' acabou.');
+  }
 
   // ---------- eventos ----------
   function alternar(lista, id, limite) {
@@ -18508,6 +18595,21 @@ body.com-rodape #aviso { bottom: calc(136px + env(safe-area-inset-bottom)); }
       var motivo = '';
       alterar(function (p) { motivo = P.alternarFormaDeLobisomem(p); });
       avisar(motivo || (atual().jogo.forma.ativa ? 'Na forma de lobisomem.' : 'De volta à forma normal.'));
+    },
+    // forma assumida (REGRAS 33; textos T3, T3b, T4 e T8 com OK dele)
+    'fera-assumir': function (b) {
+      var motivo = '', temp0 = atual().jogo.pvTemporarios;
+      alterar(function (p) { motivo = P.assumirFera(p, b.getAttribute('data-id'), b.getAttribute('data-origem')); });
+      if (motivo) { avisar(motivo); return; }
+      var p = atual(), nf = P.derivar(p).naFera, ca = nf && nf.ca !== null ? 'CA ' + nf.ca : '';
+      if (!nf) return;
+      if (!p.jogo.naFera.temp && !temp0) { avisar('Na forma de ' + nf.nome + (ca ? ': ' + ca : '') + '.'); return; }   // enxame: sem temporários
+      avisar('Na forma de ' + nf.nome + ': ' + (p.jogo.naFera.temp ?[ca, p.jogo.pvTemporarios + ' PV temporários'].filter(Boolean).join(' e ') + '.' :
+        (ca ? ca + '; ' : '') + 'ficaram os seus ' + temp0 + ' PV temporários.'));
+    },
+    'fera-voltar': function () {
+      alterar(function (p) { P.voltarDaFera(p); });
+      avisar('De volta à forma normal.');
     },
     'forma-voltar': function () {
       var motivo = '';
